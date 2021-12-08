@@ -22,7 +22,7 @@ function serversearch()
             goodserver = v.id
         end
     end
-    print("Currently checking the servers with max this number of players : " .. maxplayers .. )
+    print("Currently checking the servers with max this number of players : " .. maxplayers)
 end
 
 function getservers()
@@ -43,7 +43,7 @@ end
 getservers()
 
     print("All of the servers are searched") 
-	print("Server : " .. goodserver .. " Players : " .. maxplayers .. "/" .. serversmaxplayer .. )
+	print("Server : " .. goodserver .. " Players : " .. maxplayers .. "/" .. serversmaxplayer)
     if CopytoClipboard then
     setclipboard(goodserver)
     end
