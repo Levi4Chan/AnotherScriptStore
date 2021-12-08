@@ -3,7 +3,7 @@ getgenv().DontTeleportTheSameNumber = true --If you set this true it won't telep
 getgenv().CopytoClipboard = false
 
 if not game:IsLoaded() then
-    print("Game is loading waiting... | Amnesia Empty Server Finder")
+    print("Game is loading waiting...")
     repeat
         wait()
     until game:IsLoaded()
@@ -22,7 +22,7 @@ function serversearch()
             goodserver = v.id
         end
     end
-    print("Currently checking the servers with max this number of players : " .. maxplayers .. " | Amnesia Empty Server Finder")
+    print("Currently checking the servers with max this number of players : " .. maxplayers .. )
 end
 
 function getservers()
@@ -43,7 +43,7 @@ end
 getservers()
 
     print("All of the servers are searched") 
-	print("Server : " .. goodserver .. " Players : " .. maxplayers .. "/" .. serversmaxplayer .. " | Amnesia Empty Server Finder")
+	print("Server : " .. goodserver .. " Players : " .. maxplayers .. "/" .. serversmaxplayer .. )
     if CopytoClipboard then
     setclipboard(goodserver)
     end
