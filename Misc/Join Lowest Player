@@ -12,7 +12,7 @@ if not game:IsLoaded() then
 local maxplayers = math.huge
 local serversmaxplayer;
 local goodserver;
-local gamelink = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+local gamelink = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100" --Changed into Desc from Asc
 
 function serversearch()
     for _, v in pairs(game:GetService("HttpService"):JSONDecode(game:HttpGetAsync(gamelink)).data) do
