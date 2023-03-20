@@ -20,7 +20,7 @@ if not pcall(function() return syn.protect_gui end) then
 end
 
 --// UI Library \\--
-local Library = loadstring(game:HttpGetAsync('https://pastebin.com/raw/edJT9EGX'))()
+local Library = loadstring(game:HttpGetAsync('https://raw.githubusercontent.com/Levi4Chan/AnotherScriptStore/main/Misc/ACLib.lua'))()
 local Window = Library:CreateWindow("AutoClicker")
 Enabled_1 = Window:AddColor({
     text = 'Status:',
