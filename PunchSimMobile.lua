@@ -15,7 +15,7 @@ SectionA:NewTextBox("Wave to stop", "Will stop at the exact wave before it start
 	LabelWave:UpdateLabel("Stopping at Wave: " .. txt)
 end)
 
-SectionA:NewToggle("ToggleText", "ToggleInfo", function(state)
+SectionA:NewToggle("Auto Start Dungeon", "Will automatically starts a dungeon.", function(state)
     getgenv().DungeonTog = state
 	if getgenv().DungeonTog then 
 		game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon") 
