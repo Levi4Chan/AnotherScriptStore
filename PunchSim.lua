@@ -5,7 +5,7 @@ local events = {"MouseButton1Click", "MouseButton1Down", "Activated"}
 
 local X = Material.Load({
 	Title = "Punch Sim",
-	Style = 3,
+	Style = 2,
 	SizeX = 210,
 	SizeY = 170,
 	Theme = "Dark"
