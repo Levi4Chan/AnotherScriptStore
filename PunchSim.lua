@@ -26,16 +26,6 @@ local A = Y.TextField({
 	end
 })
 
-local F = Y.Slider({
-	Text = "For Mobile",
-	Callback = function(Value)
-		getgenv().DunPlace = tonumber(Value)
-	end,
-	Min = 1,
-	Max = 33,
-	Def = 16
-})
-
 local B = Y.Toggle({
 	Text = "Auto Start Dungeon",
 	Callback = function(Value)
