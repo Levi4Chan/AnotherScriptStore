@@ -14,8 +14,8 @@ SectionA:NewTextBox("Wave to stop", "Will stop at the exact wave before it start
 	getgenv().DunPlace = tonumber(txt)
 end)
 
-SectionA:NewToggle("ToggleText", "ToggleInfo", function(state)
-    getgenv().DungeonTog = state
+SectionA:NewToggle("Auto Start Dungeon", "Will automatically start a dungeon.", function(state)
+    	getgenv().DungeonTog = state
 	if getgenv().DungeonTog then 
 		game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon") 
 	end
@@ -45,7 +45,9 @@ task.spawn(function()
                     end
                 end
                 task.wait(8)
-                game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon")
+		if getgenv().DungeonTog then
+                	game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon")
+		end
             end
         end
     end
