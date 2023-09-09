@@ -48,7 +48,9 @@ task.spawn(function()
                     end
                 end
                 task.wait(8)
-                game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon")
+		if getgenv().DungeonTog then
+                	game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon")
+		end
             end
         end
     end
