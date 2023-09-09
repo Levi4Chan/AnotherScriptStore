@@ -1,5 +1,7 @@
 loadstring(game:HttpGet("https://github.com/Levi4Chan/AnotherScriptStore/raw/main/Access/PunchSim.lua"))()
 
+if getgenv().NotAllowed then return end
+
 local Library = loadstring(game:HttpGet("https://pastebin.com/raw/vff1bQ9F"))()
 
 local button = game:GetService("Players").LocalPlayer.PlayerGui.DungeonFinishUI.Frame.ClaimButton
