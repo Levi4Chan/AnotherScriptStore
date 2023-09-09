@@ -16,8 +16,6 @@ local SectionB = Tab:NewSection("Other Script")
 
 SectionA:NewTextBox("Wave to stop", "Will stop at the exact wave before it starts.", function(txt)
 	getgenv().DunPlace = tonumber(txt)
-	local TxtPlaceholder = "Stopping at Wave: " .. txt
-	LabelWave:UpdateLabel(TxtPlaceholder)
 end)
 
 SectionA:NewToggle("Auto Start Dungeon", "Will automatically starts a dungeon.", function(state)
@@ -26,8 +24,6 @@ SectionA:NewToggle("Auto Start Dungeon", "Will automatically starts a dungeon.",
 		game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DungeonEvent"):FireServer("StartDungeon") 
 	end
 end)
-
-local LabelWave = SectionA:NewLabel("Stopping at Wave: ")
 
 SectionB:NewButton("Start Tora", "Must have for auto dungeon", function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/ToraIsMe/ToraIsMe/main/0PUNCH"))()
