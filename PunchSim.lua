@@ -1,6 +1,6 @@
 local Material = loadstring(game:HttpGet("https://raw.githubusercontent.com/Kinlei/MaterialLua/master/Module.lua"))()
 
-local button = game:GetService("Players").CozySparkle.PlayerGui.DungeonFinishUI.Frame.ClaimButton
+local button = game:GetService("Players").LocalPlayer.PlayerGui.DungeonFinishUI.Frame.ClaimButton
 local events = {"MouseButton1Click", "MouseButton1Down", "Activated"}
 
 local X = Material.Load({
