@@ -16,7 +16,8 @@ local SectionB = Tab:NewSection("Other Script")
 
 SectionA:NewTextBox("Wave to stop", "Will stop at the exact wave before it starts.", function(txt)
 	getgenv().DunPlace = tonumber(txt)
-	LabelWave:UpdateLabel("Stopping at Wave: " .. txt)
+	local TxtPlaceholder = "Stopping at Wave: " .. txt
+	LabelWave:UpdateLabel(TxtPlaceholder)
 end)
 
 SectionA:NewToggle("Auto Start Dungeon", "Will automatically starts a dungeon.", function(state)
