@@ -22,7 +22,7 @@ local Z = X.New({
 local A = Y.TextField({
 	Text = "Wave to stop",
 	Callback = function(DunString)
-		getgenv().DunPlace = tonumber(DunString)
+		getgenv().DunPlace = 33
 	end
 })
 
