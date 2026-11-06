@@ -1,478 +1,1061 @@
--- Lunti Auto | client GUI for your Garden experience
--- Place this LocalScript in StarterPlayer > StarterPlayerScripts.
--- Expected API: ReplicatedStorage.Garden.Remotes.Action (RemoteFunction)
--- and seed packet instances under ReplicatedStorage.Garden.Assets.SeedPackets.
--- The server remains responsible for validating every action.
+
+--[[
+    LUNTI AUTO | GARDEN CONTROL
+    Modern GUI Edition
+
+    Features:
+    - Automatic GUI creation
+    - Duplicate GUI prevention
+    - Minimize / Restore
+    - Draggable interface
+    - Responsive scaling
+    - Seed packet navigation
+    - Adjustable grow wait
+    - Buy selected seed
+    - Plant slots 1-10
+    - Harvest slots 1-10
+    - Sell all
+    - Auto Cycle
+    - Status notifications
+
+    Expected game API:
+    ReplicatedStorage.Garden.Remotes.Action
+    ReplicatedStorage.Garden.Assets.SeedPackets
+
+    Intended for your own authorized Roblox experience.
+]]
+
+--// SERVICES
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
-local playerGui = game:GetService("CoreGui")
-local existingGui = playerGui:FindFirstChild("LuntiAutoGui")
-if existingGui then existingGui:Destroy() end
-local garden = ReplicatedStorage:WaitForChild("Garden")
-local seedPackets = garden:WaitForChild("Assets"):WaitForChild("SeedPackets")
+local Player = Players.LocalPlayer
 
-local COLORS = {
-	background = Color3.fromRGB(17, 26, 22),
-	panel = Color3.fromRGB(25, 38, 31),
-	panelLight = Color3.fromRGB(33, 49, 40),
-	green = Color3.fromRGB(126, 213, 137),
-	greenDark = Color3.fromRGB(67, 148, 87),
-	text = Color3.fromRGB(239, 246, 239),
-	muted = Color3.fromRGB(157, 177, 162),
-	line = Color3.fromRGB(56, 77, 62),
-	red = Color3.fromRGB(246, 132, 119),
+--// GUI CLEANUP
+
+local function getGuiParent()
+    return CoreGui
+end
+
+local GUI_PARENT = getGuiParent()
+
+local oldGui = GUI_PARENT:FindFirstChild("LuntiAutoGui")
+if oldGui then
+    oldGui:Destroy()
+end
+
+--// CONFIGURATION
+
+local CONFIG = {
+    GrowWait = 60,
+    MinimumWait = 10,
+    MaximumWait = 600,
+    WaitStep = 10,
+    TweenSpeed = 0.18,
 }
 
-local seedOptions = {}
-local selectedSeedIndex = 1
-local growWaitSeconds = 60
-local jobInProgress = false
-local autoCycleRunning = false
-local autoCycleRunId = 0
+local COLORS = {
+    Background = Color3.fromRGB(15, 23, 19),
+    Panel = Color3.fromRGB(23, 35, 28),
+    PanelLight = Color3.fromRGB(31, 47, 37),
+    PanelHover = Color3.fromRGB(42, 61, 47),
 
-local function refreshSeedOptions()
-	seedOptions = seedPackets:GetChildren()
-	table.sort(seedOptions, function(a, b)
-		return a.Name:lower() < b.Name:lower()
-	end)
-	if #seedOptions == 0 then
-		selectedSeedIndex = 1
-	elseif selectedSeedIndex > #seedOptions then
-		selectedSeedIndex = 1
-	end
+    Green = Color3.fromRGB(135, 218, 144),
+    GreenDark = Color3.fromRGB(65, 139, 81),
+
+    Text = Color3.fromRGB(240, 247, 241),
+    Muted = Color3.fromRGB(151, 173, 157),
+
+    Red = Color3.fromRGB(222, 103, 91),
+    Border = Color3.fromRGB(54, 76, 60),
+}
+
+--// VARIABLES
+
+local SeedOptions = {}
+local SelectedSeedIndex = 1
+
+local JobInProgress = false
+local AutoCycleRunning = false
+local AutoCycleID = 0
+
+local GardenReference
+local SeedPacketsReference
+
+--// GARDEN REFERENCES
+-- These are non-blocking so the GUI can appear immediately.
+
+local function GetGarden()
+    return ReplicatedStorage:FindFirstChild("Garden")
 end
-refreshSeedOptions()
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "LuntiAutoGui"
-gui.DisplayOrder = 100
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
+local function GetSeedPackets()
+    local Garden = GetGarden()
+    if not Garden then return nil end
 
-local scale = Instance.new("UIScale")
-scale.Parent = gui
+    local Assets = Garden:FindFirstChild("Assets")
+    if not Assets then return nil end
 
-local function updateScale()
-	local camera = Workspace.CurrentCamera
-	if not camera then return end
-	local viewport = camera.ViewportSize
-	scale.Scale = math.clamp(math.min(viewport.X / 450, viewport.Y / 700), 0.76, 1)
+    return Assets:FindFirstChild("SeedPackets")
 end
-updateScale()
+
+local function RefreshSeedOptions()
+    GardenReference = GetGarden()
+    SeedPacketsReference = GetSeedPackets()
+
+    SeedOptions = {}
+
+    if SeedPacketsReference then
+        SeedOptions = SeedPacketsReference:GetChildren()
+    end
+
+    table.sort(SeedOptions, function(A, B)
+        return A.Name:lower() < B.Name:lower()
+    end)
+
+    if #SeedOptions == 0 then
+        SelectedSeedIndex = 1
+    elseif SelectedSeedIndex > #SeedOptions then
+        SelectedSeedIndex = 1
+    end
+end
+
+local function GetSelectedSeed()
+    RefreshSeedOptions()
+
+    if #SeedOptions == 0 then
+        return nil
+    end
+
+    return SeedOptions[SelectedSeedIndex]
+end
+
+--// GUI HELPERS
+
+local function Create(className, properties, parent)
+    local object = Instance.new(className)
+
+    for property, value in pairs(properties) do
+        object[property] = value
+    end
+
+    object.Parent = parent
+
+    return object
+end
+
+local function Round(object, radius)
+    Create("UICorner", {
+        CornerRadius = UDim.new(0, radius)
+    }, object)
+end
+
+local function Outline(object, color, transparency)
+    Create("UIStroke", {
+        Color = color or COLORS.Border,
+        Transparency = transparency or 0,
+        Thickness = 1,
+    }, object)
+end
+
+local function MakeLabel(parent, text, size, position, fontSize, color)
+    return Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = text,
+        Size = size,
+        Position = position,
+        Font = Enum.Font.GothamMedium,
+        TextSize = fontSize or 12,
+        TextColor3 = color or COLORS.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+    }, parent)
+end
+
+local function MakeButton(parent, text, size, position, color)
+    local button = Create("TextButton", {
+        Text = text,
+        Size = size,
+        Position = position,
+        BackgroundColor3 = color or COLORS.PanelLight,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamSemibold,
+        TextSize = 12,
+        TextColor3 = COLORS.Text,
+        AutoButtonColor = true,
+    }, parent)
+
+    Round(button, 10)
+
+    return button
+end
+
+local function MakeCard(parent, size, position)
+    local card = Create("Frame", {
+        Size = size,
+        Position = position,
+        BackgroundColor3 = COLORS.Panel,
+        BorderSizePixel = 0,
+    }, parent)
+
+    Round(card, 12)
+
+    return card
+end
+
+--// SCREEN GUI
+
+local GUI = Create("ScreenGui", {
+    Name = "LuntiAutoGui",
+    ResetOnSpawn = false,
+    DisplayOrder = 999,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, GUI_PARENT)
+
+--// RESPONSIVE SCALING
+
+local Scale = Create("UIScale", {
+    Scale = 1,
+}, GUI)
+
+local function UpdateScale()
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+
+    local viewport = camera.ViewportSize
+
+    Scale.Scale = math.clamp(
+        math.min(viewport.X / 440, viewport.Y / 680),
+        0.65,
+        1
+    )
+end
+
+UpdateScale()
+
 if Workspace.CurrentCamera then
-	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateScale)
 end
 
-local function round(instance, radius)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = instance
-	return corner
+--// MAIN WINDOW
+
+local Window = Create("Frame", {
+    Name = "MainWindow",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(390, 590),
+    BackgroundColor3 = COLORS.Background,
+    BorderSizePixel = 0,
+}, GUI)
+
+Round(Window, 18)
+Outline(Window, COLORS.Border, 0.1)
+
+--// HEADER
+
+local Header = Create("Frame", {
+    Size = UDim2.new(1, 0, 0, 70),
+    BackgroundColor3 = COLORS.Panel,
+    BorderSizePixel = 0,
+}, Window)
+
+Round(Header, 18)
+
+Create("Frame", {
+    Position = UDim2.new(0, 0, 1, -16),
+    Size = UDim2.new(1, 0, 0, 16),
+    BackgroundColor3 = COLORS.Panel,
+    BorderSizePixel = 0,
+}, Header)
+
+local Logo = Create("Frame", {
+    Position = UDim2.fromOffset(17, 16),
+    Size = UDim2.fromOffset(38, 38),
+    BackgroundColor3 = Color3.fromRGB(43, 78, 51),
+    BorderSizePixel = 0,
+}, Header)
+
+Round(Logo, 12)
+
+local LogoText = MakeLabel(
+    Logo,
+    "L",
+    UDim2.fromScale(1, 1),
+    UDim2.fromScale(0, 0),
+    22,
+    COLORS.Green
+)
+
+LogoText.TextXAlignment = Enum.TextXAlignment.Center
+LogoText.Font = Enum.Font.GothamBold
+
+MakeLabel(
+    Header,
+    "LUNTI AUTO",
+    UDim2.fromOffset(200, 24),
+    UDim2.fromOffset(65, 12),
+    17,
+    COLORS.Text
+).Font = Enum.Font.GothamBold
+
+MakeLabel(
+    Header,
+    "GARDEN CONTROL CENTER",
+    UDim2.fromOffset(200, 18),
+    UDim2.fromOffset(66, 36),
+    9,
+    COLORS.Muted
+)
+
+local MinimizeButton = MakeButton(
+    Header,
+    "−",
+    UDim2.fromOffset(30, 30),
+    UDim2.new(1, -84, 0, 18),
+    COLORS.PanelLight
+)
+
+MinimizeButton.TextSize = 20
+
+local CloseButton = MakeButton(
+    Header,
+    "×",
+    UDim2.fromOffset(30, 30),
+    UDim2.new(1, -44, 0, 18),
+    COLORS.PanelLight
+)
+
+CloseButton.TextSize = 20
+
+--// CONTENT
+
+local Content = Create("Frame", {
+    Position = UDim2.fromOffset(17, 84),
+    Size = UDim2.new(1, -34, 1, -99),
+    BackgroundTransparency = 1,
+}, Window)
+
+--// STATUS CARD
+
+local StatusCard = MakeCard(
+    Content,
+    UDim2.new(1, 0, 0, 55),
+    UDim2.fromOffset(0, 0)
+)
+
+local StatusDot = Create("Frame", {
+    Position = UDim2.fromOffset(14, 22),
+    Size = UDim2.fromOffset(10, 10),
+    BackgroundColor3 = COLORS.Green,
+    BorderSizePixel = 0,
+}, StatusCard)
+
+Round(StatusDot, 10)
+
+MakeLabel(
+    StatusCard,
+    "STATUS",
+    UDim2.fromOffset(100, 15),
+    UDim2.fromOffset(33, 7),
+    9,
+    COLORS.Muted
+).Font = Enum.Font.GothamBold
+
+local StatusText = MakeLabel(
+    StatusCard,
+    "Initializing...",
+    UDim2.new(1, -48, 0, 20),
+    UDim2.fromOffset(33, 25),
+    12,
+    COLORS.Text
+)
+
+StatusText.TextTruncate = Enum.TextTruncate.AtEnd
+
+local function SetStatus(message, color)
+    StatusText.Text = tostring(message)
+    StatusDot.BackgroundColor3 = color or COLORS.Green
 end
 
-local function stroke(instance, color, transparency)
-	local outline = Instance.new("UIStroke")
-	outline.Color = color
-	outline.Transparency = transparency or 0
-	outline.Thickness = 1
-	outline.Parent = instance
-	return outline
+--// SEED SECTION
+
+MakeLabel(
+    Content,
+    "SEED PACKET",
+    UDim2.new(1, 0, 0, 17),
+    UDim2.fromOffset(2, 66),
+    10,
+    COLORS.Muted
+).Font = Enum.Font.GothamBold
+
+local SeedCard = MakeCard(
+    Content,
+    UDim2.new(1, 0, 0, 58),
+    UDim2.fromOffset(0, 88)
+)
+
+local SeedName = MakeLabel(
+    SeedCard,
+    "Loading seed packets...",
+    UDim2.new(1, -115, 1, 0),
+    UDim2.fromOffset(15, 0),
+    13,
+    COLORS.Text
+)
+
+SeedName.Font = Enum.Font.GothamSemibold
+SeedName.TextTruncate = Enum.TextTruncate.AtEnd
+
+local PreviousSeed = MakeButton(
+    SeedCard,
+    "‹",
+    UDim2.fromOffset(32, 34),
+    UDim2.new(1, -84, 0.5, -17),
+    COLORS.PanelLight
+)
+
+PreviousSeed.TextSize = 22
+
+local NextSeed = MakeButton(
+    SeedCard,
+    "›",
+    UDim2.fromOffset(32, 34),
+    UDim2.new(1, -44, 0.5, -17),
+    COLORS.PanelLight
+)
+
+NextSeed.TextSize = 22
+NextSeed.TextColor3 = COLORS.Green
+
+local function RefreshSeedLabel()
+    local crop = GetSelectedSeed()
+
+    if crop then
+        SeedName.Text = crop.Name
+    else
+        SeedName.Text = "No seed packets found"
+    end
 end
 
-local function label(parent, name, text, position, size, textSize, color, font)
-	local item = Instance.new("TextLabel")
-	item.Name = name
-	item.BackgroundTransparency = 1
-	item.Position = position
-	item.Size = size
-	item.Font = font or Enum.Font.Gotham
-	item.Text = text
-	item.TextSize = textSize
-	item.TextColor3 = color or COLORS.text
-	item.TextXAlignment = Enum.TextXAlignment.Left
-	item.TextYAlignment = Enum.TextYAlignment.Center
-	item.Parent = parent
-	return item
-end
+--// GROW WAIT SECTION
 
-local function button(parent, name, text, position, size, background, textColor)
-	local item = Instance.new("TextButton")
-	item.Name = name
-	item.Position = position
-	item.Size = size
-	item.BackgroundColor3 = background
-	item.BorderSizePixel = 0
-	item.AutoButtonColor = true
-	item.Font = Enum.Font.GothamSemibold
-	item.Text = text
-	item.TextSize = 12
-	item.TextColor3 = textColor or COLORS.text
-	item.Parent = parent
-	round(item, 10)
-	return item
-end
+MakeLabel(
+    Content,
+    "GROW WAIT BEFORE HARVEST",
+    UDim2.new(1, 0, 0, 17),
+    UDim2.fromOffset(2, 158),
+    10,
+    COLORS.Muted
+).Font = Enum.Font.GothamBold
 
-local window = Instance.new("Frame")
-window.Name = "Window"
-window.AnchorPoint = Vector2.new(0.5, 0.5)
-window.Position = UDim2.fromScale(0.5, 0.5)
-window.Size = UDim2.fromOffset(390, 590)
-window.BackgroundColor3 = COLORS.background
-window.BorderSizePixel = 0
-window.Parent = gui
-round(window, 18)
-stroke(window, COLORS.line, 0.15)
+local WaitCard = MakeCard(
+    Content,
+    UDim2.new(1, 0, 0, 58),
+    UDim2.fromOffset(0, 180)
+)
 
-local header = Instance.new("Frame")
-header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 72)
-header.BackgroundColor3 = COLORS.panel
-header.BorderSizePixel = 0
-header.Parent = window
-round(header, 18)
-local headerFill = Instance.new("Frame")
-headerFill.Position = UDim2.new(0, 0, 1, -18)
-headerFill.Size = UDim2.new(1, 0, 0, 18)
-headerFill.BackgroundColor3 = COLORS.panel
-headerFill.BorderSizePixel = 0
-headerFill.Parent = header
+MakeLabel(
+    WaitCard,
+    "Auto cycle pause",
+    UDim2.new(1, -155, 1, 0),
+    UDim2.fromOffset(15, 0),
+    12,
+    COLORS.Muted
+)
 
-local logo = Instance.new("Frame")
-logo.Position = UDim2.fromOffset(18, 17)
-logo.Size = UDim2.fromOffset(38, 38)
-logo.BackgroundColor3 = Color3.fromRGB(45, 83, 55)
-logo.BorderSizePixel = 0
-logo.Parent = header
-round(logo, 12)
-local logoText = label(logo, "LogoLetter", "L", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), 21, COLORS.green, Enum.Font.GothamBold)
-logoText.TextXAlignment = Enum.TextXAlignment.Center
-label(header, "Title", "LUNTI AUTO", UDim2.fromOffset(67, 15), UDim2.new(1, -125, 0, 25), 17, COLORS.text, Enum.Font.GothamBold)
-label(header, "Subtitle", "GARDEN CONTROL", UDim2.fromOffset(68, 39), UDim2.new(1, -125, 0, 16), 9, COLORS.muted, Enum.Font.GothamSemibold)
-local closeButton = button(header, "Close", "×", UDim2.new(1, -48, 0, 15), UDim2.fromOffset(30, 30), COLORS.panelLight, COLORS.muted)
-closeButton.TextSize = 21
+local WaitValue = MakeLabel(
+    WaitCard,
+    tostring(CONFIG.GrowWait) .. "s",
+    UDim2.fromOffset(55, 58),
+    UDim2.new(1, -122, 0, 0),
+    14,
+    COLORS.Text
+)
 
-local content = Instance.new("Frame")
-content.Name = "Content"
-content.Position = UDim2.fromOffset(18, 88)
-content.Size = UDim2.new(1, -36, 1, -106)
-content.BackgroundTransparency = 1
-content.Parent = window
+WaitValue.TextXAlignment = Enum.TextXAlignment.Center
 
-local statusCard = Instance.new("Frame")
-statusCard.Name = "StatusCard"
-statusCard.Size = UDim2.new(1, 0, 0, 56)
-statusCard.BackgroundColor3 = COLORS.panel
-statusCard.BorderSizePixel = 0
-statusCard.Parent = content
-round(statusCard, 12)
-local statusDot = Instance.new("Frame")
-statusDot.Position = UDim2.fromOffset(14, 22)
-statusDot.Size = UDim2.fromOffset(9, 9)
-statusDot.BackgroundColor3 = COLORS.muted
-statusDot.BorderSizePixel = 0
-statusDot.Parent = statusCard
-round(statusDot, 6)
-label(statusCard, "StatusCaption", "STATUS", UDim2.fromOffset(32, 10), UDim2.fromOffset(90, 14), 9, COLORS.muted, Enum.Font.GothamBold)
-local statusText = label(statusCard, "StatusText", "Ready", UDim2.fromOffset(32, 27), UDim2.new(1, -45, 0, 18), 12, COLORS.text, Enum.Font.GothamMedium)
-statusText.TextTruncate = Enum.TextTruncate.AtEnd
+local LessWait = MakeButton(
+    WaitCard,
+    "−",
+    UDim2.fromOffset(28, 32),
+    UDim2.new(1, -67, 0.5, -16),
+    COLORS.PanelLight
+)
 
-label(content, "SeedLabel", "SEED PACKET", UDim2.fromOffset(2, 68), UDim2.new(1, -4, 0, 16), 10, COLORS.muted, Enum.Font.GothamBold)
-local seedCard = Instance.new("Frame")
-seedCard.Position = UDim2.fromOffset(0, 91)
-seedCard.Size = UDim2.new(1, 0, 0, 58)
-seedCard.BackgroundColor3 = COLORS.panel
-seedCard.BorderSizePixel = 0
-seedCard.Parent = content
-round(seedCard, 12)
-local seedName = label(seedCard, "SeedName", "Loading seed packets…", UDim2.fromOffset(16, 0), UDim2.new(1, -112, 1, 0), 14, COLORS.text, Enum.Font.GothamSemibold)
-local previousSeed = button(seedCard, "PreviousSeed", "‹", UDim2.new(1, -86, 0.5, -17), UDim2.fromOffset(32, 34), COLORS.panelLight, COLORS.muted)
-previousSeed.TextSize = 22
-local nextSeed = button(seedCard, "NextSeed", "›", UDim2.new(1, -46, 0.5, -17), UDim2.fromOffset(32, 34), COLORS.panelLight, COLORS.green)
-nextSeed.TextSize = 22
+local MoreWait = MakeButton(
+    WaitCard,
+    "+",
+    UDim2.fromOffset(28, 32),
+    UDim2.new(1, -34, 0.5, -16),
+    COLORS.PanelLight
+)
 
-label(content, "GrowWaitLabel", "GROW WAIT BEFORE HARVEST", UDim2.fromOffset(2, 161), UDim2.new(1, -4, 0, 16), 10, COLORS.muted, Enum.Font.GothamBold)
-local waitCard = Instance.new("Frame")
-waitCard.Position = UDim2.fromOffset(0, 184)
-waitCard.Size = UDim2.new(1, 0, 0, 58)
-waitCard.BackgroundColor3 = COLORS.panel
-waitCard.BorderSizePixel = 0
-waitCard.Parent = content
-round(waitCard, 12)
-label(waitCard, "WaitHint", "Auto cycle pause", UDim2.fromOffset(16, 0), UDim2.new(1, -160, 1, 0), 12, COLORS.muted, Enum.Font.Gotham)
-local waitValue = label(waitCard, "WaitValue", tostring(growWaitSeconds) .. "s", UDim2.new(1, -118, 0, 0), UDim2.fromOffset(48, 58), 14, COLORS.text, Enum.Font.GothamSemibold)
-waitValue.TextXAlignment = Enum.TextXAlignment.Center
-local lessWait = button(waitCard, "LessWait", "−", UDim2.new(1, -69, 0.5, -16), UDim2.fromOffset(28, 32), COLORS.panelLight, COLORS.muted)
-local moreWait = button(waitCard, "MoreWait", "+", UDim2.new(1, -35, 0.5, -16), UDim2.fromOffset(28, 32), COLORS.panelLight, COLORS.green)
-lessWait.TextSize = 18
-moreWait.TextSize = 18
+LessWait.TextSize = 18
+MoreWait.TextSize = 18
+MoreWait.TextColor3 = COLORS.Green
 
-label(content, "ActionsLabel", "QUICK ACTIONS", UDim2.fromOffset(2, 257), UDim2.new(1, -4, 0, 16), 10, COLORS.muted, Enum.Font.GothamBold)
-local buyButton = button(content, "BuySeed", "BUY SELECTED", UDim2.fromOffset(0, 280), UDim2.new(0.5, -5, 0, 44), COLORS.panelLight, COLORS.text)
-local plantButton = button(content, "PlantAll", "PLANT SLOTS 1–10", UDim2.new(0.5, 5, 0, 280), UDim2.new(0.5, -5, 0, 44), COLORS.panelLight, COLORS.green)
-local harvestButton = button(content, "HarvestAll", "HARVEST 1–10", UDim2.fromOffset(0, 334), UDim2.new(0.5, -5, 0, 44), COLORS.panelLight, COLORS.text)
-local sellButton = button(content, "Sell", "SELL ALL", UDim2.new(0.5, 5, 0, 334), UDim2.new(0.5, -5, 0, 44), COLORS.panelLight, COLORS.text)
-local autoButton = button(content, "AutoCycle", "START AUTO CYCLE", UDim2.fromOffset(0, 396), UDim2.new(1, 0, 0, 48), COLORS.greenDark, COLORS.text)
-autoButton.TextSize = 13
-local footer = label(content, "Footer", "Auto cycle: buy → plant 1–10 → wait → harvest → sell", UDim2.fromOffset(2, 454), UDim2.new(1, -4, 0, 18), 9, COLORS.muted, Enum.Font.Gotham)
-footer.TextXAlignment = Enum.TextXAlignment.Center
+--// QUICK ACTIONS
 
-local function setStatus(message, color)
-	statusText.Text = message
-	statusDot.BackgroundColor3 = color or COLORS.green
-end
+MakeLabel(
+    Content,
+    "QUICK ACTIONS",
+    UDim2.new(1, 0, 0, 17),
+    UDim2.fromOffset(2, 251),
+    10,
+    COLORS.Muted
+).Font = Enum.Font.GothamBold
 
-local function selectedCrop()
-	refreshSeedOptions()
-	if #seedOptions == 0 then return nil end
-	return seedOptions[selectedSeedIndex]
-end
+local BuyButton = MakeButton(
+    Content,
+    "BUY SELECTED",
+    UDim2.new(0.5, -5, 0, 44),
+    UDim2.fromOffset(0, 274),
+    COLORS.PanelLight
+)
 
-local function cropDisplayName(crop)
-	if not crop then return "No seed packets found" end
-	return crop.Name
-end
+local PlantButton = MakeButton(
+    Content,
+    "PLANT SLOTS 1–10",
+    UDim2.new(0.5, -5, 0, 44),
+    UDim2.new(0.5, 5, 0, 274),
+    COLORS.PanelLight
+)
 
-local function refreshSeedLabel()
-	local crop = selectedCrop()
-	seedName.Text = cropDisplayName(crop)
-end
-refreshSeedLabel()
+PlantButton.TextColor3 = COLORS.Green
 
-local function getActionRemote()
-	local remotes = garden:FindFirstChild("Remotes")
-	local remote = remotes and remotes:FindFirstChild("Action")
-	if remote and remote:IsA("RemoteFunction") then return remote end
-	return nil
-end
+local HarvestButton = MakeButton(
+    Content,
+    "HARVEST 1–10",
+    UDim2.new(0.5, -5, 0, 44),
+    UDim2.fromOffset(0, 326),
+    COLORS.PanelLight
+)
 
-local function invokeAction(action, argument)
-	local remote = getActionRemote()
-	if not remote then
-		return false, "Garden.Remotes.Action RemoteFunction not found"
-	end
+local SellButton = MakeButton(
+    Content,
+    "SELL ALL",
+    UDim2.new(0.5, -5, 0, 44),
+    UDim2.new(0.5, 5, 0, 326),
+    COLORS.PanelLight
+)
 
-	local callOk, result, detail = pcall(function()
-		return remote:InvokeServer(action, argument)
-	end)
-	if not callOk then
-		return false, action .. " request failed"
-	end
-	if result == false then
-		return false, type(detail) == "string" and detail or (action .. " was declined")
-	end
-	if type(detail) == "string" then return true, detail end
-	if type(result) == "string" then return true, result end
-	return true, nil
-end
+--// AUTO CYCLE BUTTON
 
-local function mustInvoke(action, argument, progressMessage)
-	setStatus(progressMessage, COLORS.green)
-	local ok, response = invokeAction(action, argument)
-	if not ok then error(response, 0) end
-	return response
-end
+local AutoButton = MakeButton(
+    Content,
+    "START AUTO CYCLE",
+    UDim2.new(1, 0, 0, 48),
+    UDim2.fromOffset(0, 386),
+    COLORS.GreenDark
+)
 
-local function runJob(progressMessage, job)
-	if jobInProgress then
-		setStatus("An action is already running", COLORS.muted)
-		return
-	end
-	jobInProgress = true
-	setStatus(progressMessage, COLORS.green)
-	task.spawn(function()
-		local ok, result = pcall(job)
-		jobInProgress = false
-		if ok then
-			setStatus(type(result) == "string" and result or "Action complete", COLORS.green)
-		else
-			setStatus(tostring(result), COLORS.red)
-			if autoCycleRunning then
-				autoCycleRunning = false
-				autoButton.Text = "START AUTO CYCLE"
-				autoButton.BackgroundColor3 = COLORS.greenDark
-			end
-		end
-	end)
-end
+AutoButton.TextSize = 13
 
-previousSeed.Activated:Connect(function()
-	refreshSeedOptions()
-	if #seedOptions == 0 then
-		refreshSeedLabel()
-		setStatus("SeedPackets folder is empty", COLORS.red)
-		return
-	end
-	selectedSeedIndex = ((selectedSeedIndex - 2) % #seedOptions) + 1
-	refreshSeedLabel()
-end)
-nextSeed.Activated:Connect(function()
-	refreshSeedOptions()
-	if #seedOptions == 0 then
-		refreshSeedLabel()
-		setStatus("SeedPackets folder is empty", COLORS.red)
-		return
-	end
-	selectedSeedIndex = (selectedSeedIndex % #seedOptions) + 1
-	refreshSeedLabel()
-end)
+MakeLabel(
+    Content,
+    "Buy → Plant → Wait → Harvest → Sell",
+    UDim2.new(1, 0, 0, 20),
+    UDim2.fromOffset(0, 440),
+    9,
+    COLORS.Muted
+).TextXAlignment = Enum.TextXAlignment.Center
 
-lessWait.Activated:Connect(function()
-	growWaitSeconds = math.max(growWaitSeconds - 10, 10)
-	waitValue.Text = tostring(growWaitSeconds) .. "s"
-end)
-moreWait.Activated:Connect(function()
-	growWaitSeconds = math.min(growWaitSeconds + 10, 600)
-	waitValue.Text = tostring(growWaitSeconds) .. "s"
-end)
+--// MINIMIZE / RESTORE
 
-buyButton.Activated:Connect(function()
-	runJob("Buying seed packet…", function()
-		local crop = selectedCrop()
-		if not crop then error("No seed packets found in SeedPackets", 0) end
-		local response = mustInvoke("Buy", crop, "Buying " .. crop.Name .. "…")
-		return response or (crop.Name .. " bought")
-	end)
-end)
+local RestoreButton = MakeButton(
+    GUI,
+    "L",
+    UDim2.fromOffset(48, 48),
+    UDim2.new(0, 20, 0.5, 0),
+    COLORS.GreenDark
+)
 
-plantButton.Activated:Connect(function()
-	runJob("Planting slots 1–10…", function()
-		local crop = selectedCrop()
-		if not crop then error("No seed packets found in SeedPackets", 0) end
-		for i = 1, 10 do
-			mustInvoke("Plant", { Crop = crop, Slot = i }, "Planting " .. crop.Name .. " in slot " .. i .. "/10…")
-		end
-		return "Slots 1–10 planted"
-	end)
-end)
+RestoreButton.AnchorPoint = Vector2.new(0, 0.5)
+RestoreButton.Visible = false
+RestoreButton.TextSize = 20
+RestoreButton.Font = Enum.Font.GothamBold
 
-harvestButton.Activated:Connect(function()
-	runJob("Harvesting slots 1–10…", function()
-		for i = 1, 10 do
-			mustInvoke("Harvest", i, "Harvesting slot " .. i .. "/10…")
-		end
-		return "Slots 1–10 harvested"
-	end)
-end)
-
-sellButton.Activated:Connect(function()
-	runJob("Selling harvest…", function()
-		local response = mustInvoke("Sell", nil, "Selling all harvested crops…")
-		return response or "Harvest sold"
-	end)
-end)
-
-local function waitForGrowTime(thisRun)
-	local remaining = growWaitSeconds
-	while remaining > 0 and autoCycleRunning and thisRun == autoCycleRunId do
-		local step = math.min(remaining, 0.25)
-		task.wait(step)
-		remaining -= step
-	end
-end
-
-autoButton.Activated:Connect(function()
-	if autoCycleRunning then
-		autoCycleRunning = false
-		autoCycleRunId += 1
-		autoButton.Text = "START AUTO CYCLE"
-		autoButton.BackgroundColor3 = COLORS.greenDark
-		setStatus("Auto cycle stopping…", COLORS.muted)
-		return
-	end
-	if jobInProgress then
-		setStatus("Wait for the current action to finish", COLORS.muted)
-		return
-	end
-	if not selectedCrop() then
-		setStatus("No seed packets found in SeedPackets", COLORS.red)
-		return
-	end
-	if not getActionRemote() then
-		setStatus("Garden.Remotes.Action not found", COLORS.red)
-		return
-	end
-
-	autoCycleRunning = true
-	jobInProgress = true
-	autoCycleRunId += 1
-	local thisRun = autoCycleRunId
-	autoButton.Text = "STOP AUTO CYCLE"
-	autoButton.BackgroundColor3 = Color3.fromRGB(137, 77, 69)
-
-	task.spawn(function()
-		local ok, result = pcall(function()
-			while autoCycleRunning and thisRun == autoCycleRunId do
-				local crop = selectedCrop()
-				if not crop then error("No seed packets found in SeedPackets", 0) end
-				for i = 1, 10 do
-					if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-					mustInvoke("Buy", crop, "Buying " .. crop.Name .. " for slot " .. i .. "/10…")
-					if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-					mustInvoke("Plant", { Crop = crop, Slot = i }, "Planting " .. crop.Name .. " in slot " .. i .. "/10…")
-				end
-				if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-				setStatus("Waiting " .. tostring(growWaitSeconds) .. "s for crops…", COLORS.green)
-				waitForGrowTime(thisRun)
-				if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-				for i = 1, 10 do
-					if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-					mustInvoke("Harvest", i, "Harvesting slot " .. i .. "/10…")
-				end
-				if not autoCycleRunning or thisRun ~= autoCycleRunId then break end
-				mustInvoke("Sell", nil, "Selling harvested crops…")
-			end
-			return "Auto cycle stopped"
-		end)
-		jobInProgress = false
-		if ok then
-			if autoCycleRunning then setStatus("Auto cycle complete", COLORS.green) end
-		else
-			setStatus(tostring(result), COLORS.red)
-		end
-		autoCycleRunning = false
-		autoButton.Text = "START AUTO CYCLE"
-		autoButton.BackgroundColor3 = COLORS.greenDark
-	end)
+MinimizeButton.Activated:Connect(function()
+    Window.Visible = false
+    RestoreButton.Visible = true
 end)
 
--- Make the header draggable on desktop and touch screens.
-local dragging = false
-local dragInput
-local dragStart
-local startPosition
-header.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPosition = window.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then dragging = false end
-		end)
-	end
+RestoreButton.Activated:Connect(function()
+    Window.Visible = true
+    RestoreButton.Visible = false
 end)
-header.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
+
+--// REMOTE ACCESS
+
+local function GetActionRemote()
+    local Garden = GetGarden()
+    if not Garden then return nil end
+
+    local Remotes = Garden:FindFirstChild("Remotes")
+    if not Remotes then return nil end
+
+    local Remote = Remotes:FindFirstChild("Action")
+
+    if Remote and Remote:IsA("RemoteFunction") then
+        return Remote
+    end
+
+    return nil
+end
+
+local function InvokeAction(action, argument)
+    local Remote = GetActionRemote()
+
+    if not Remote then
+        return false, "Garden Action RemoteFunction unavailable"
+    end
+
+    local success, result, detail = pcall(function()
+        return Remote:InvokeServer(action, argument)
+    end)
+
+    if not success then
+        return false, tostring(result)
+    end
+
+    if result == false then
+        return false, type(detail) == "string"
+            and detail
+            or action .. " was declined"
+    end
+
+    if type(detail) == "string" then
+        return true, detail
+    end
+
+    if type(result) == "string" then
+        return true, result
+    end
+
+    return true, nil
+end
+
+local function MustInvoke(action, argument, message)
+    SetStatus(message, COLORS.Green)
+
+    local success, response = InvokeAction(action, argument)
+
+    if not success then
+        error(response, 0)
+    end
+
+    return response
+end
+
+--// JOB HANDLER
+
+local function RunJob(message, callback)
+    if JobInProgress then
+        SetStatus("An action is already running", COLORS.Muted)
+        return
+    end
+
+    JobInProgress = true
+    SetStatus(message, COLORS.Green)
+
+    task.spawn(function()
+        local success, result = pcall(callback)
+
+        JobInProgress = false
+
+        if success then
+            SetStatus(
+                type(result) == "string" and result or "Action complete",
+                COLORS.Green
+            )
+        else
+            SetStatus(tostring(result), COLORS.Red)
+
+            if AutoCycleRunning then
+                AutoCycleRunning = false
+                AutoCycleID += 1
+
+                AutoButton.Text = "START AUTO CYCLE"
+                AutoButton.BackgroundColor3 = COLORS.GreenDark
+            end
+        end
+    end)
+end
+
+--// SEED NAVIGATION
+
+PreviousSeed.Activated:Connect(function()
+    RefreshSeedOptions()
+
+    if #SeedOptions == 0 then
+        RefreshSeedLabel()
+        SetStatus("No seed packets available", COLORS.Red)
+        return
+    end
+
+    SelectedSeedIndex =
+        ((SelectedSeedIndex - 2) % #SeedOptions) + 1
+
+    RefreshSeedLabel()
 end)
+
+NextSeed.Activated:Connect(function()
+    RefreshSeedOptions()
+
+    if #SeedOptions == 0 then
+        RefreshSeedLabel()
+        SetStatus("No seed packets available", COLORS.Red)
+        return
+    end
+
+    SelectedSeedIndex =
+        (SelectedSeedIndex % #SeedOptions) + 1
+
+    RefreshSeedLabel()
+end)
+
+--// WAIT TIME CONTROLS
+
+LessWait.Activated:Connect(function()
+    CONFIG.GrowWait = math.max(
+        CONFIG.MinimumWait,
+        CONFIG.GrowWait - CONFIG.WaitStep
+    )
+
+    WaitValue.Text = tostring(CONFIG.GrowWait) .. "s"
+end)
+
+MoreWait.Activated:Connect(function()
+    CONFIG.GrowWait = math.min(
+        CONFIG.MaximumWait,
+        CONFIG.GrowWait + CONFIG.WaitStep
+    )
+
+    WaitValue.Text = tostring(CONFIG.GrowWait) .. "s"
+end)
+
+--// BUY SELECTED SEED
+
+BuyButton.Activated:Connect(function()
+    RunJob("Buying seed packet...", function()
+        local crop = GetSelectedSeed()
+
+        if not crop then
+            error("No seed packets found", 0)
+        end
+
+        local response = MustInvoke(
+            "Buy",
+            crop,
+            "Buying " .. crop.Name .. "..."
+        )
+
+        return response or crop.Name .. " purchased"
+    end)
+end)
+
+--// PLANT ALL
+
+PlantButton.Activated:Connect(function()
+    RunJob("Planting slots 1–10...", function()
+        local crop = GetSelectedSeed()
+
+        if not crop then
+            error("No seed packets found", 0)
+        end
+
+        for i = 1, 10 do
+            MustInvoke(
+                "Plant",
+                {
+                    Crop = crop,
+                    Slot = i
+                },
+                "Planting slot " .. i .. "/10..."
+            )
+        end
+
+        return "Slots 1–10 planted"
+    end)
+end)
+
+--// HARVEST ALL
+
+HarvestButton.Activated:Connect(function()
+    RunJob("Harvesting crops...", function()
+        for i = 1, 10 do
+            MustInvoke(
+                "Harvest",
+                i,
+                "Harvesting slot " .. i .. "/10..."
+            )
+        end
+
+        return "Slots 1–10 harvested"
+    end)
+end)
+
+--// SELL ALL
+
+SellButton.Activated:Connect(function()
+    RunJob("Selling harvested crops...", function()
+        local response = MustInvoke(
+            "Sell",
+            nil,
+            "Selling all harvested crops..."
+        )
+
+        return response or "Harvest sold"
+    end)
+end)
+
+--// AUTO CYCLE
+
+local function WaitForGrowTime(runID)
+    local remaining = CONFIG.GrowWait
+
+    while remaining > 0
+        and AutoCycleRunning
+        and runID == AutoCycleID do
+
+        local step = math.min(remaining, 0.25)
+
+        task.wait(step)
+        remaining -= step
+    end
+end
+
+AutoButton.Activated:Connect(function()
+
+    -- STOP AUTO CYCLE
+
+    if AutoCycleRunning then
+        AutoCycleRunning = false
+        AutoCycleID += 1
+
+        AutoButton.Text = "START AUTO CYCLE"
+        AutoButton.BackgroundColor3 = COLORS.GreenDark
+
+        SetStatus("Auto cycle stopping...", COLORS.Muted)
+        return
+    end
+
+    if JobInProgress then
+        SetStatus("Wait for current action to finish", COLORS.Muted)
+        return
+    end
+
+    local crop = GetSelectedSeed()
+
+    if not crop then
+        SetStatus("No seed packets found", COLORS.Red)
+        return
+    end
+
+    if not GetActionRemote() then
+        SetStatus("Garden Action Remote unavailable", COLORS.Red)
+        return
+    end
+
+    AutoCycleRunning = true
+    JobInProgress = true
+    AutoCycleID += 1
+
+    local currentRun = AutoCycleID
+
+    AutoButton.Text = "STOP AUTO CYCLE"
+    AutoButton.BackgroundColor3 = COLORS.Red
+
+    task.spawn(function()
+
+        local success, result = pcall(function()
+
+            while AutoCycleRunning
+                and currentRun == AutoCycleID do
+
+                local selectedCrop = GetSelectedSeed()
+
+                if not selectedCrop then
+                    error("Selected seed is unavailable", 0)
+                end
+
+                -- BUY AND PLANT SLOTS
+
+                for i = 1, 10 do
+                    if not AutoCycleRunning
+                        or currentRun ~= AutoCycleID then
+                        break
+                    end
+
+                    MustInvoke(
+                        "Buy",
+                        selectedCrop,
+                        "Buying " .. selectedCrop.Name .. " (" .. i .. "/10)"
+                    )
+
+                    if not AutoCycleRunning
+                        or currentRun ~= AutoCycleID then
+                        break
+                    end
+
+                    MustInvoke(
+                        "Plant",
+                        {
+                            Crop = selectedCrop,
+                            Slot = i
+                        },
+                        "Planting slot " .. i .. "/10..."
+                    )
+                end
+
+                if not AutoCycleRunning
+                    or currentRun ~= AutoCycleID then
+                    break
+                end
+
+                -- WAIT FOR CROPS
+
+                SetStatus(
+                    "Growing crops: " .. CONFIG.GrowWait .. "s",
+                    COLORS.Green
+                )
+
+                WaitForGrowTime(currentRun)
+
+                if not AutoCycleRunning
+                    or currentRun ~= AutoCycleID then
+                    break
+                end
+
+                -- HARVEST
+
+                for i = 1, 10 do
+                    if not AutoCycleRunning
+                        or currentRun ~= AutoCycleID then
+                        break
+                    end
+
+                    MustInvoke(
+                        "Harvest",
+                        i,
+                        "Harvesting slot " .. i .. "/10..."
+                    )
+                end
+
+                if not AutoCycleRunning
+                    or currentRun ~= AutoCycleID then
+                    break
+                end
+
+                -- SELL
+
+                MustInvoke(
+                    "Sell",
+                    nil,
+                    "Selling harvested crops..."
+                )
+            end
+
+            return "Auto cycle stopped"
+
+        end)
+
+        JobInProgress = false
+
+        if success then
+            SetStatus(
+                result or "Auto cycle finished",
+                COLORS.Green
+            )
+        else
+            SetStatus(tostring(result), COLORS.Red)
+        end
+
+        AutoCycleRunning = false
+
+        AutoButton.Text = "START AUTO CYCLE"
+        AutoButton.BackgroundColor3 = COLORS.GreenDark
+
+    end)
+end)
+
+--// DRAGGABLE WINDOW
+
+local Dragging = false
+local DragStart
+local StartPosition
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        Dragging = true
+        DragStart = input.Position
+        StartPosition = Window.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                Dragging = false
+            end
+        end)
+    end
+end)
+
 UserInputService.InputChanged:Connect(function(input)
-	if dragging and input == dragInput then
-		local delta = input.Position - dragStart
-		window.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
-	end
+    if not Dragging then return end
+
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        local delta = input.Position - DragStart
+
+        Window.Position = UDim2.new(
+            StartPosition.X.Scale,
+            StartPosition.X.Offset + delta.X,
+            StartPosition.Y.Scale,
+            StartPosition.Y.Offset + delta.Y
+        )
+    end
 end)
 
-closeButton.Activated:Connect(function()
-	autoCycleRunning = false
-	autoCycleRunId += 1
-	gui:Destroy()
+--// CLOSE GUI
+
+CloseButton.Activated:Connect(function()
+    AutoCycleRunning = false
+    AutoCycleID += 1
+
+    GUI:Destroy()
 end)
 
+--// INITIALIZATION
 
+RefreshSeedOptions()
+RefreshSeedLabel()
+
+if #SeedOptions > 0 then
+    SetStatus("Garden interface ready", COLORS.Green)
+else
+    SetStatus("Waiting for seed packets...", COLORS.Muted)
+
+    -- Continue checking for assets without blocking GUI creation.
+    task.spawn(function()
+        while GUI.Parent and #SeedOptions == 0 do
+            task.wait(2)
+
+            RefreshSeedOptions()
+            RefreshSeedLabel()
+
+            if #SeedOptions > 0 then
+                SetStatus("Seed packets loaded", COLORS.Green)
+                break
+            end
+        end
+    end)
+end
+
+print("[Lunti Auto] GUI successfully initialized.")
