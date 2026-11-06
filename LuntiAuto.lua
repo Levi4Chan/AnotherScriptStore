@@ -876,10 +876,7 @@ PlantButton.Activated:Connect(function()
                 },
                 "Planting slot " .. i .. "/10..."
             )
-
-            if i < 10 then
                 task.wait(0.4)
-            end
         end
 
         return "Slots 1–10 planted"
@@ -896,10 +893,7 @@ HarvestButton.Activated:Connect(function()
                 i,
                 "Harvesting slot " .. i .. "/10..."
             )
-
-            if i < 10 then
                 task.wait(0.3)
-            end
         end
 
         return "Slots 1–10 harvested"
@@ -1019,10 +1013,7 @@ AutoButton.Activated:Connect(function()
                         },
                         "Planting slot " .. i .. "/10..."
                     )
-
-                    if i < 10 then
                         task.wait(0.4)
-                    end
                 end
 
                 if not AutoCycleRunning
@@ -1057,10 +1048,7 @@ AutoButton.Activated:Connect(function()
                         i,
                         "Harvesting slot " .. i .. "/10..."
                     )
-
-                    if i < 10 then
                         task.wait(0.3)
-                    end
                 end
 
                 if not AutoCycleRunning
