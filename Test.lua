@@ -31,7 +31,7 @@ do
 end
 
 
-
+--[[
 WindUI.Creator.AddIcons("solar", {
     ["CheckSquareBold"] = "rbxassetid://132438947521974",
     ["CursorSquareBold"] = "rbxassetid://120306472146156",
@@ -41,9 +41,9 @@ WindUI.Creator.AddIcons("solar", {
     ["Home2Bold"] = "rbxassetid://92190299966310",
     ["InfoSquareBold"] = "rbxassetid://119096461016615",
     ["PasswordMinimalisticInputBold"] = "rbxassetid://109919668957167"
-    --["SolarSquareTransferHorizontalBold"] = "rbxassetid://125444491429160",
+    ,["SolarSquareTransferHorizontalBold"] = "rbxassetid://125444491429160",
 })
-
+]]
 function createPopup()
 	return WindUI:Popup({
 		Title = "Welcome to the WindUI!",
