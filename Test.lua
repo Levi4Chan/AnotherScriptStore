@@ -1223,26 +1223,67 @@ local Tabs = {
 
 local Crops = game:GetService("ReplicatedStorage").Garden.Assets.SeedPackets
 local CropsTable = {}
+local CropsValue
+local ToggleValue
 
 for _, v in next, Crops:GetDescendants() do
 	table.insert(CropsTable, v)
 end
 
 Tabs.MainTab:Dropdown({
-	Title = "Main Category",
+	Title = "Crops",
 	Values = CropsTable,
-	Value = "All",
+	Value = "Carrot",
 	Callback = function(option)
-		if dropdownA then
-			task.spawn(function()
-				if option == "All" then
-					dropdownA:Refresh(LargeListA)
-				else
-					dropdownA:Refresh(LargeListB)
-				end
-
-				dropdownA:Select({ "All" })
-			end)
-		end
+		CropsValue = option
 	end,
 })
+
+Tabs.MainTab:Toggle({
+	Title = "Auto Farm",
+	Callback = function(v)
+		ToggleValue = v
+	end,
+})
+
+while task.wait() do
+
+for i=1, 5 do
+		Event:InvokeServer(
+			"Buy",
+			CropsValue
+		)
+		task.wait(0.2)
+	end
+	
+	for i=1, 5 do
+		Event:InvokeServer(
+		"Plant",
+		{
+			Crop = CropsValue,
+			Slot = i
+		}
+		)
+
+		wait(0.4)
+	end
+	
+	
+	
+	for i=1, 5 do
+
+			Event:InvokeServer(
+			"Harvest",
+			i
+		)
+		task.wait(0.2)
+	end
+	
+	wait(1)
+	
+	Event:InvokeServer(
+		"Sell",
+		nil
+	)
+	
+end
