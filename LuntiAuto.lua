@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Edition
+    Modern GUI Editionyes
 
     Features:
     - Automatic GUI creation
@@ -100,6 +100,8 @@ local SelectedSeeds = {}
 local JobInProgress = false
 local AutoCycleRunning = false
 local AutoCycleID = 0
+local AutoBuyRunning = false
+local AutoBuyID = 0
 
 local GardenReference
 local SeedPacketsReference
@@ -277,7 +279,7 @@ local Window = Create("Frame", {
     Name = "MainWindow",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(390, 650),
+    Size = UDim2.fromOffset(390, 710),
     BackgroundColor3 = COLORS.Background,
     BorderSizePixel = 0,
 }, GUI)
@@ -652,6 +654,15 @@ TeleportButton.Activated:Connect(function()
     root.CFrame = CFrame.new(272, 5, -104)
     SetStatus("Teleported to 272, 5, -104", COLORS.Green)
 end)
+
+local AutoBuyButton = MakeButton(
+    Content,
+    "START AUTO BUY",
+    UDim2.new(1, 0, 0, 44),
+    UDim2.fromOffset(0, 582),
+    COLORS.GreenDark
+)
+AutoBuyButton.TextSize = 12
 
 --// MINIMIZE / RESTORE
 
@@ -1033,6 +1044,60 @@ local function BuyWithSeedFallback(seedNames)
     error("All selected seeds failed to buy: " .. table.concat(errors," | "),0)
 end
 
+
+-- Independent Auto Buy cycle. Uses only the ordered multi-select list.
+AutoBuyButton.Activated:Connect(function()
+    if AutoBuyRunning then
+        AutoBuyRunning = false
+        AutoBuyID += 1
+        AutoBuyButton.Text = "START AUTO BUY"
+        AutoBuyButton.BackgroundColor3 = COLORS.GreenDark
+        SetStatus("Auto Buy stopping...", COLORS.Muted)
+        return
+    end
+
+    if #GetPrioritySeedNames() == 0 then
+        SetStatus("Select seed packets before starting Auto Buy", COLORS.Red)
+        return
+    end
+
+    AutoBuyRunning = true
+    AutoBuyID += 1
+    local runID = AutoBuyID
+    AutoBuyButton.Text = "STOP AUTO BUY"
+    AutoBuyButton.BackgroundColor3 = COLORS.Red
+
+    task.spawn(function()
+        while AutoBuyRunning and runID == AutoBuyID and GUI.Parent do
+            local priority = GetPrioritySeedNames()
+            if #priority == 0 then
+                SetStatus("No seed packets selected; Auto Buy waiting...", COLORS.Red)
+                task.wait(1)
+            else
+                local ok, result = pcall(function()
+                    local boughtName = BuyWithSeedFallback(priority)
+                    return boughtName
+                end)
+
+                if ok then
+                    SetStatus("Bought " .. tostring(result) .. "; next Auto Buy pass...", COLORS.Green)
+                    task.wait(1)
+                else
+                    SetStatus("Auto Buy failed: " .. tostring(result), COLORS.Red)
+                    warn("[Lunti Auto] Auto Buy failed: " .. tostring(result))
+                    task.wait(2)
+                end
+            end
+        end
+
+        AutoBuyRunning = false
+        if GUI.Parent then
+            AutoBuyButton.Text = "START AUTO BUY"
+            AutoBuyButton.BackgroundColor3 = COLORS.GreenDark
+        end
+    end)
+end)
+
 BuyButton.Activated:Connect(function()
     RunJob("Buying selected seed packets...",function()
         local names = GetPrioritySeedNames()
@@ -1255,41 +1320,8 @@ AutoButton.Activated:Connect(function()
                     )
                 end
             end
-            
-            -- STEP 2: BUY. Only run if Plant succeeded.
-            if passOK and stillRunning() then
-                local ok, result = pcall(function()
-                    local selectedCrop = GetSelectedSeed()
-                    if not selectedCrop then
-                        error("Selected seed is unavailable", 0)
-                    end
 
-                    local bought = 0
-                    for i = 1, 10 do
-                        if not stillRunning() then
-                            return bought
-                        end
-
-                        MustInvoke(
-                            "Buy",
-                            selectedCrop,
-                            "Buying " .. selectedCrop .. " (" .. i .. "/10)"
-                        )
-                        bought += 1
-                    end
-                    return bought
-                end)
-
-                if not stillRunning() then
-                    break
-                end
-
-                if not ok then
-                    passOK, failedStage, failureReason = false, "Buy", result
-                end
-            end
-
-            -- STEP 3: PLANT. Only run if Harvest succeeded.
+            -- STEP 2: PLANT. Only run if Harvest succeeded.
             if passOK and stillRunning() then
                 local ok, result = pcall(function()
                     return PlantAllSlots(true, currentRun)
@@ -1304,7 +1336,7 @@ AutoButton.Activated:Connect(function()
                 end
             end
 
-            -- STEP 4: SELL. Only run if Buy succeeded.
+            -- STEP 3: SELL. Only run if Plant succeeded.
             if passOK and stillRunning() then
                 local ok, result = pcall(function()
                     return MustInvoke("Sell", nil, "Selling harvested crops...")
@@ -1390,6 +1422,8 @@ end)
 CloseButton.Activated:Connect(function()
     AutoCycleRunning = false
     AutoCycleID += 1
+    AutoBuyRunning = false
+    AutoBuyID += 1
 
     GUI:Destroy()
     if dragConnection then dragConnection:Disconnect() end
