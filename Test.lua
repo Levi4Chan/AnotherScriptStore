@@ -40,8 +40,8 @@ WindUI.Creator.AddIcons("solar", {
     ["HamburgerMenuBold"] = "rbxassetid://134384554225463",
     ["Home2Bold"] = "rbxassetid://92190299966310",
     ["InfoSquareBold"] = "rbxassetid://119096461016615",
-    ["PasswordMinimalisticInputBold"] = "rbxassetid://109919668957167",
-    ["SolarSquareTransferHorizontalBold"] = "rbxassetid://125444491429160",
+    ["PasswordMinimalisticInputBold"] = "rbxassetid://109919668957167"
+    --["SolarSquareTransferHorizontalBold"] = "rbxassetid://125444491429160",
 })
 
 function createPopup()
