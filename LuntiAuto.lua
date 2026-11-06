@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Editionyes
+    Modern GUI Edition
 
     Features:
     - Automatic GUI creation
@@ -1255,23 +1255,8 @@ AutoButton.Activated:Connect(function()
                     )
                 end
             end
-
-            -- STEP 2: PLANT. Only run if Harvest succeeded.
-            if passOK and stillRunning() then
-                local ok, result = pcall(function()
-                    return PlantAllSlots(true, currentRun)
-                end)
-
-                if not stillRunning() then
-                    break
-                end
-
-                if not ok then
-                    passOK, failedStage, failureReason = false, "Plant", result
-                end
-            end
-
-            -- STEP 3: BUY. Only run if Plant succeeded.
+            
+            -- STEP 2: BUY. Only run if Plant succeeded.
             if passOK and stillRunning() then
                 local ok, result = pcall(function()
                     local selectedCrop = GetSelectedSeed()
@@ -1301,6 +1286,21 @@ AutoButton.Activated:Connect(function()
 
                 if not ok then
                     passOK, failedStage, failureReason = false, "Buy", result
+                end
+            end
+
+            -- STEP 3: PLANT. Only run if Harvest succeeded.
+            if passOK and stillRunning() then
+                local ok, result = pcall(function()
+                    return PlantAllSlots(true, currentRun)
+                end)
+
+                if not stillRunning() then
+                    break
+                end
+
+                if not ok then
+                    passOK, failedStage, failureReason = false, "Plant", result
                 end
             end
 
