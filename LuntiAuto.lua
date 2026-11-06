@@ -1,3 +1,5 @@
+
+
 --[[
     LUNTI AUTO | GARDEN CONTROL
     Modern GUI Edition
@@ -615,6 +617,10 @@ RestoreButton.Activated:Connect(function()
 end)
 
 --// REMOTE ACCESS
+-- InvokeServer is used because Action must be a RemoteFunction.
+-- The client argument contract below preserves the uploaded script's original
+-- calls. If the server says "Unknown seed", the server handler's expected
+-- seed identifier/argument must be confirmed; the client cannot infer it.
 
 local function GetActionRemote()
     local Garden = GetGarden()
@@ -636,29 +642,72 @@ local function InvokeAction(action, argument)
     local Remote = GetActionRemote()
 
     if not Remote then
-        return false, "Garden Action RemoteFunction unavailable"
+        return false, "Garden.Remotes.Action RemoteFunction unavailable"
     end
 
-    local success, result, detail = pcall(function()
+    -- This game API is assumed to accept (actionName, argument).
+    -- Keep the original argument shapes until the server handler confirms otherwise.
+    local ok, result, detail = pcall(function()
         return Remote:InvokeServer(action, argument)
     end)
 
-    if not success then
+    if not ok then
+        warn("[Lunti Auto] InvokeServer failed for", action, ":", result)
         return false, tostring(result)
     end
 
+    -- Support common server response formats without assuming every response is a string.
     if result == false then
-        return false, type(detail) == "string"
-            and detail
-            or action .. " was declined"
+        local message = type(detail) == "string" and detail or (action .. " was rejected by the server")
+        warn("[Lunti Auto] Server rejected", action, ":", message)
+        return false, message
+    end
+
+    if type(result) == "table" then
+        local succeeded = result.Success
+        if succeeded == nil then succeeded = result.success end
+        if succeeded == nil then succeeded = result.Ok end
+        if succeeded == nil then succeeded = result.ok end
+
+        local message = result.Message or result.message or result.Error or result.error or result.Status or result.status
+        if succeeded == false then
+            message = tostring(message or (action .. " was rejected by the server"))
+            warn("[Lunti Auto] Server rejected", action, ":", message)
+            return false, message
+        end
+
+        if message ~= nil then
+            message = tostring(message)
+            local lower = message:lower()
+            if lower:find("unknown seed", 1, true)
+                or lower:find("invalid seed", 1, true)
+                or lower:find("not enough", 1, true)
+                or lower:find("failed", 1, true)
+                or lower:find("error", 1, true) then
+                warn("[Lunti Auto] Server response for", action, ":", message)
+                return false, message
+            end
+            return true, message
+        end
+
+        return true, nil
+    end
+
+    if type(result) == "string" then
+        local lower = result:lower()
+        if lower:find("unknown seed", 1, true)
+            or lower:find("invalid seed", 1, true)
+            or lower:find("not enough", 1, true)
+            or lower:find("failed", 1, true)
+            or lower:find("error", 1, true) then
+            warn("[Lunti Auto] Server response for", action, ":", result)
+            return false, result
+        end
+        return true, result
     end
 
     if type(detail) == "string" then
         return true, detail
-    end
-
-    if type(result) == "string" then
-        return true, result
     end
 
     return true, nil
