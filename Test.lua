@@ -44,6 +44,7 @@ WindUI.Creator.AddIcons("solar", {
     ,["SolarSquareTransferHorizontalBold"] = "rbxassetid://125444491429160",
 })
 ]]
+
 function createPopup()
 	return WindUI:Popup({
 		Title = "Welcome to the WindUI!",
@@ -1227,8 +1228,8 @@ local CropsValue
 local ToggleValue
 local Event = game:GetService("ReplicatedStorage").Garden.Remotes.Action
 
-for _, v in next, Crops:GetDescendants() do
-	table.insert(CropsTable, v)
+for _, v in ipairs(Crops:GetChildren()) do
+	table.insert(CropsTable, v.Name)
 end
 
 Tabs.MainTab:Dropdown({
