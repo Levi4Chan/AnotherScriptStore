@@ -1248,44 +1248,46 @@ Tabs.MainTab:Toggle({
 	end,
 })
 
-while task.wait() and ToggleValue do
+while task.wait() do
 
-for i=1, 5 do
-		Event:InvokeServer(
+	if ToggleValue == true then
+	
+		for i=1, 5 do
+			Event:InvokeServer(
 			"Buy",
 			CropsValue
 		)
 		task.wait(0.2)
-	end
+		end
 	
-	for i=1, 5 do
-		Event:InvokeServer(
-		"Plant",
-		{
-			Crop = CropsValue,
-			Slot = i
-		}
-		)
+		for i=1, 5 do
+			Event:InvokeServer(
+			"Plant",
+			{
+				Crop = CropsValue,
+				Slot = i
+			}
+			)
 
-		wait(0.4)
-	end
+			wait(0.4)
+		end
 	
 	
 	
-	for i=1, 5 do
-
+		for i=1, 5 do
 			Event:InvokeServer(
 			"Harvest",
 			i
-		)
-		task.wait(0.2)
-	end
+			)
+			task.wait(0.2)
+		end
 	
-	wait(1)
+		wait(1)
 	
-	Event:InvokeServer(
+		Event:InvokeServer(
 		"Sell",
 		nil
-	)
-	
+		)
+		
+	end
 end
