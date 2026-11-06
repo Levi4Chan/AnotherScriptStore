@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Edition
+    Modern GUI Editionyes
 
     Features:
     - Automatic GUI creation
@@ -95,6 +95,7 @@ local COLORS = {
 
 local SeedOptions = {}
 local SelectedSeedIndex = 1
+local SelectedSeeds = {}
 
 local JobInProgress = false
 local AutoCycleRunning = false
@@ -419,65 +420,88 @@ local function SetStatus(message, color)
     StatusDot.BackgroundColor3 = color or COLORS.Green
 end
 
---// SEED SECTION
+--// PRIORITY SEED MULTI-SELECT
+MakeLabel(Content, "SEED PACKET PRIORITY (TOP TO BOTTOM)", UDim2.new(1,0,0,17), UDim2.fromOffset(2,66), 10, COLORS.Muted).Font = Enum.Font.GothamBold
+local SeedDropdownButton = MakeButton(Content, "  Choose seed packets  ▾", UDim2.new(1,0,0,42), UDim2.fromOffset(0,88), COLORS.PanelLight)
+SeedDropdownButton.TextXAlignment = Enum.TextXAlignment.Left
+local SeedDropdown = Create("ScrollingFrame", {
+    Name = "SeedPriorityDropdown", Position = UDim2.fromOffset(0,134),
+    Size = UDim2.new(1,0,0,104), BackgroundColor3 = COLORS.Panel,
+    BorderSizePixel = 0, ScrollBarThickness = 4, CanvasSize = UDim2.fromOffset(0,0),
+    Visible = false, ZIndex = 20,
+}, Content)
+Round(SeedDropdown,10)
+Outline(SeedDropdown,COLORS.Border,0.15)
+local SeedDropdownLayout = Create("UIListLayout", {
+    Padding = UDim.new(0,4), SortOrder = Enum.SortOrder.LayoutOrder,
+}, SeedDropdown)
+local SeedPrioritySummary = MakeLabel(Content, "Priority: none", UDim2.new(1,0,0,18), UDim2.fromOffset(2,137), 9, COLORS.Muted)
 
-MakeLabel(
-    Content,
-    "SEED PACKET",
-    UDim2.new(1, 0, 0, 17),
-    UDim2.fromOffset(2, 66),
-    10,
-    COLORS.Muted
-).Font = Enum.Font.GothamBold
-
-local SeedCard = MakeCard(
-    Content,
-    UDim2.new(1, 0, 0, 58),
-    UDim2.fromOffset(0, 88)
-)
-
-local SeedName = MakeLabel(
-    SeedCard,
-    "Loading seed packets...",
-    UDim2.new(1, -115, 1, 0),
-    UDim2.fromOffset(15, 0),
-    13,
-    COLORS.Text
-)
-
-SeedName.Font = Enum.Font.GothamSemibold
-SeedName.TextTruncate = Enum.TextTruncate.AtEnd
-
-local PreviousSeed = MakeButton(
-    SeedCard,
-    "‹",
-    UDim2.fromOffset(32, 34),
-    UDim2.new(1, -84, 0.5, -17),
-    COLORS.PanelLight
-)
-
-PreviousSeed.TextSize = 22
-
-local NextSeed = MakeButton(
-    SeedCard,
-    "›",
-    UDim2.fromOffset(32, 34),
-    UDim2.new(1, -44, 0.5, -17),
-    COLORS.PanelLight
-)
-
-NextSeed.TextSize = 22
-NextSeed.TextColor3 = COLORS.Green
+local function GetPrioritySeedNames()
+    local names = {}
+    for _, name in ipairs(SelectedSeeds) do
+        if type(name) == "string" and name ~= "" then table.insert(names,name) end
+    end
+    return names
+end
 
 local function RefreshSeedLabel()
-    local crop = GetSelectedSeed()
-
-    if crop then
-        SeedName.Text = crop
+    local names = GetPrioritySeedNames()
+    if #names == 0 then
+        SeedDropdownButton.Text = "  Choose seed packets  ▾"
+        SeedPrioritySummary.Text = "Priority: none"
     else
-        SeedName.Text = "No seed packets found"
+        SeedDropdownButton.Text = "  " .. #names .. " selected  ▾"
+        SeedPrioritySummary.Text = "Priority: " .. table.concat(names," → ")
     end
 end
+
+local function RefreshSeedDropdown()
+    RefreshSeedOptions()
+    for _, child in ipairs(SeedDropdown:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local present = {}
+    for _, obj in ipairs(SeedOptions) do present[obj.Name] = true end
+    for i = #SelectedSeeds, 1, -1 do
+        if not present[SelectedSeeds[i]] then table.remove(SelectedSeeds,i) end
+    end
+    for index, obj in ipairs(SeedOptions) do
+        local name = obj.Name
+        local selectedIndex
+        for i, chosen in ipairs(SelectedSeeds) do
+            if chosen == name then selectedIndex = i break end
+        end
+        local option = MakeButton(
+            SeedDropdown,
+            selectedIndex and (selectedIndex .. ". ✓  " .. name) or ("＋  " .. name),
+            UDim2.new(1,-8,0,30), UDim2.fromOffset(4,0),
+            selectedIndex and COLORS.PanelHover or COLORS.PanelLight
+        )
+        option.LayoutOrder = index
+        option.TextXAlignment = Enum.TextXAlignment.Left
+        option.ZIndex = 21
+        option.Activated:Connect(function()
+            local found
+            for i, chosen in ipairs(SelectedSeeds) do
+                if chosen == name then found = i break end
+            end
+            if found then table.remove(SelectedSeeds,found)
+            else table.insert(SelectedSeeds,name) end
+            RefreshSeedDropdown()
+            RefreshSeedLabel()
+        end)
+    end
+    task.defer(function()
+        SeedDropdown.CanvasSize = UDim2.fromOffset(0,SeedDropdownLayout.AbsoluteContentSize.Y + 8)
+    end)
+    RefreshSeedLabel()
+end
+
+SeedDropdownButton.Activated:Connect(function()
+    SeedDropdown.Visible = not SeedDropdown.Visible
+    if SeedDropdown.Visible then RefreshSeedDropdown() end
+end)
 
 --// GROW WAIT SECTION
 
@@ -485,7 +509,7 @@ MakeLabel(
     Content,
     "GROW WAIT BEFORE HARVEST",
     UDim2.new(1, 0, 0, 17),
-    UDim2.fromOffset(2, 158),
+    UDim2.fromOffset(2, 220),
     10,
     COLORS.Muted
 ).Font = Enum.Font.GothamBold
@@ -493,7 +517,7 @@ MakeLabel(
 local WaitCard = MakeCard(
     Content,
     UDim2.new(1, 0, 0, 58),
-    UDim2.fromOffset(0, 180)
+    UDim2.fromOffset(0, 242)
 )
 
 MakeLabel(
@@ -542,7 +566,7 @@ MakeLabel(
     Content,
     "QUICK ACTIONS",
     UDim2.new(1, 0, 0, 17),
-    UDim2.fromOffset(2, 251),
+    UDim2.fromOffset(2, 313),
     10,
     COLORS.Muted
 ).Font = Enum.Font.GothamBold
@@ -551,7 +575,7 @@ local BuyButton = MakeButton(
     Content,
     "BUY SELECTED",
     UDim2.new(0.5, -5, 0, 44),
-    UDim2.fromOffset(0, 274),
+    UDim2.fromOffset(0, 336),
     COLORS.PanelLight
 )
 
@@ -559,7 +583,7 @@ local PlantButton = MakeButton(
     Content,
     "PLANT SLOTS 1–10",
     UDim2.new(0.5, -5, 0, 44),
-    UDim2.new(0.5, 5, 0, 274),
+    UDim2.new(0.5, 5, 0, 336),
     COLORS.PanelLight
 )
 
@@ -569,7 +593,7 @@ local HarvestButton = MakeButton(
     Content,
     "HARVEST 1–10",
     UDim2.new(0.5, -5, 0, 44),
-    UDim2.fromOffset(0, 326),
+    UDim2.fromOffset(0, 388),
     COLORS.PanelLight
 )
 
@@ -577,7 +601,7 @@ local SellButton = MakeButton(
     Content,
     "SELL ALL",
     UDim2.new(0.5, -5, 0, 44),
-    UDim2.new(0.5, 5, 0, 326),
+    UDim2.new(0.5, 5, 0, 388),
     COLORS.PanelLight
 )
 
@@ -587,7 +611,7 @@ local AutoButton = MakeButton(
     Content,
     "START AUTO CYCLE",
     UDim2.new(1, 0, 0, 48),
-    UDim2.fromOffset(0, 386),
+    UDim2.fromOffset(0, 448),
     COLORS.GreenDark
 )
 
@@ -597,7 +621,7 @@ MakeLabel(
     Content,
     "Buy → Plant → Wait → Harvest → Sell",
     UDim2.new(1, 0, 0, 20),
-    UDim2.fromOffset(0, 440),
+    UDim2.fromOffset(0, 502),
     9,
     COLORS.Muted
 ).TextXAlignment = Enum.TextXAlignment.Center
@@ -913,36 +937,6 @@ end
 
 --// SEED NAVIGATION
 
-PreviousSeed.Activated:Connect(function()
-    RefreshSeedOptions()
-
-    if #SeedOptions == 0 then
-        RefreshSeedLabel()
-        SetStatus("No seed packets available", COLORS.Red)
-        return
-    end
-
-    SelectedSeedIndex =
-        ((SelectedSeedIndex - 2) % #SeedOptions) + 1
-
-    RefreshSeedLabel()
-end)
-
-NextSeed.Activated:Connect(function()
-    RefreshSeedOptions()
-
-    if #SeedOptions == 0 then
-        RefreshSeedLabel()
-        SetStatus("No seed packets available", COLORS.Red)
-        return
-    end
-
-    SelectedSeedIndex =
-        (SelectedSeedIndex % #SeedOptions) + 1
-
-    RefreshSeedLabel()
-end)
-
 --// WAIT TIME CONTROLS
 
 LessWait.Activated:Connect(function()
@@ -965,56 +959,82 @@ end)
 
 --// BUY SELECTED SEED
 
-BuyButton.Activated:Connect(function()
-    RunJob("Buying seed packet...", function()
-        local crop = GetSelectedSeed()
+local function IsSeedFallbackResponse(message)
+    local lower = tostring(message or ""):lower()
+    return lower:find("unknown seed",1,true)
+        or lower:find("invalid seed",1,true)
+        or lower:find("out of stock",1,true)
+        or lower:find("restock",1,true)
+        or lower:find("unavailable",1,true)
+        or lower:find("not available",1,true)
+end
 
-        if not crop then
-            error("No seed packets found", 0)
+local function BuyWithSeedFallback(seedNames)
+    local errors = {}
+    for _, seedName in ipairs(seedNames) do
+        local ok, response = InvokeAction("Buy",seedName)
+        if ok then return seedName,response end
+        local reason = tostring(response or "Buy rejected")
+        if IsSeedFallbackResponse(reason) then
+            table.insert(errors,seedName .. ": " .. reason)
+            SetStatus(seedName .. " unavailable; trying next selected seed...",COLORS.Muted)
+            task.wait(CONFIG.PlantDelay)
+        else
+            error("Buy failed for " .. seedName .. ": " .. reason,0)
         end
+    end
+    error("All selected seeds failed to buy: " .. table.concat(errors," | "),0)
+end
 
-        local response = MustInvoke(
-            "Buy",
-            crop,
-            "Buying " .. crop .. "..."
-        )
-
-        return response or crop .. " purchased"
+BuyButton.Activated:Connect(function()
+    RunJob("Buying selected seed packets...",function()
+        local names = GetPrioritySeedNames()
+        if #names == 0 then error("Select one or more seed packets first",0) end
+        local bought,response = BuyWithSeedFallback(names)
+        return response or (bought .. " purchased")
     end)
 end)
 
 --// SHARED PLANT ROUTINE
 -- Both the manual Plant button and Auto Cycle call this exact routine.
 local function PlantAllSlots(isAuto, runID)
-    local crop = GetSelectedSeed()
-
-    if not crop then
-        error("No seed packets found", 0)
-    end
-
+    local seedNames = GetPrioritySeedNames()
+    if #seedNames == 0 then error("Select one or more seed packets first",0) end
     local planted = 0
+    local slotFailures = {}
 
-    for i = 1, 10 do
-        if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then
-            break
+    for slot = 1,10 do
+        if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then break end
+        local plantedThisSlot = false
+        local errors = {}
+
+        for _, seedName in ipairs(seedNames) do
+            if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then break end
+            SetStatus("Planting slot " .. slot .. " with " .. seedName .. "...",COLORS.Green)
+            local ok,response = InvokeAction("Plant",{Crop=seedName,Slot=slot})
+            if ok then
+                planted += 1
+                plantedThisSlot = true
+                break
+            end
+
+            local reason = tostring(response or "Plant rejected")
+            if IsSeedFallbackResponse(reason) then
+                table.insert(errors,seedName .. ": " .. reason)
+                SetStatus(seedName .. " unavailable for slot " .. slot .. "; trying next...",COLORS.Muted)
+                task.wait(CONFIG.PlantDelay)
+            else
+                error("Plant slot " .. slot .. " failed for " .. seedName .. ": " .. reason,0)
+            end
         end
 
-        MustInvoke(
-            "Plant",
-            {
-                Crop = crop,
-                Slot = i
-            },
-            "Planting slot " .. i .. "/10..."
-        )
-
-        planted += 1
-
-        if i < 10 then
-            task.wait(CONFIG.PlantDelay)
+        if not plantedThisSlot then
+            table.insert(slotFailures,"Slot " .. slot .. " rejected all selected seeds (" .. table.concat(errors,"; ") .. ")")
         end
+        if slot < 10 then task.wait(CONFIG.PlantDelay) end
     end
 
+    if #slotFailures > 0 then error(table.concat(slotFailures," | "),0) end
     return planted
 end
 
@@ -1094,10 +1114,10 @@ AutoButton.Activated:Connect(function()
         return
     end
 
-    local crop = GetSelectedSeed()
+    local prioritySeeds = GetPrioritySeedNames()
 
-    if not crop then
-        SetStatus("No seed packets found", COLORS.Red)
+    if #prioritySeeds == 0 then
+        SetStatus("Select one or more seed packets first", COLORS.Red)
         return
     end
 
@@ -1116,103 +1136,130 @@ AutoButton.Activated:Connect(function()
     AutoButton.BackgroundColor3 = COLORS.Red
 
     task.spawn(function()
-        -- Requested order: HARVEST -> PLANT -> BUY -> SELL.
-        -- The grow timer runs after SELL, so the next loop begins by harvesting
-        -- crops that had time to grow. Auto Cycle stays on until STOP is pressed.
+        -- Order: HARVEST -> PLANT -> BUY -> SELL.
+        -- Any failed stage aborts the current pass and restarts at HARVEST.
+        -- Auto Cycle stops only when the user presses STOP or closes the GUI.
         while AutoCycleRunning and currentRun == AutoCycleID and GUI.Parent do
-            local cycleOK, cycleError = pcall(function()
-                -- 1) HARVEST using the same routine as the manual Harvest button.
-                local harvested, skipped, harvestErrors =
-                    HarvestAllSlots(true, currentRun)
+            local function stillRunning()
+                return AutoCycleRunning and currentRun == AutoCycleID and GUI.Parent ~= nil
+            end
 
-                if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                    return
-                end
+            local function retryFromHarvest(stageName, reason)
+                local message = stageName .. " failed: " .. tostring(reason)
+                    .. " | restarting from Harvest in 3s"
+                warn("[Lunti Auto] " .. message)
+                SetStatus(message, COLORS.Red)
 
-                SetStatus(
-                    "Harvested " .. harvested .. "; skipped " .. skipped,
-                    #harvestErrors > 0 and COLORS.Red or COLORS.Green
-                )
-
-                -- 2) PLANT using the same routine as the manual Plant button.
-                local planted = PlantAllSlots(true, currentRun)
-
-                if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                    return
-                end
-
-                -- 3) BUY selected seed packets for stock.
-                local selectedCrop = GetSelectedSeed()
-                if not selectedCrop then
-                    error("Selected seed is unavailable", 0)
-                end
-
-                for i = 1, 10 do
-                    if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                        return
+                for _ = 1, 12 do
+                    if not stillRunning() then
+                        return false
                     end
-
-                    MustInvoke(
-                        "Buy",
-                        selectedCrop,
-                        "Buying " .. selectedCrop .. " (" .. i .. "/10)"
-                    )
+                    task.wait(0.25)
                 end
 
-                if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                    return
+                return stillRunning()
+            end
+
+            local passOK, failedStage, failureReason = true, nil, nil
+
+            -- STEP 1: HARVEST
+            do
+                local ok, harvested, skipped, harvestErrors = pcall(function()
+                    return HarvestAllSlots(true, currentRun)
+                end)
+
+                if not stillRunning() then
+                    break
                 end
 
-                -- 4) SELL after planting and buying, as requested.
-                MustInvoke(
-                    "Sell",
-                    nil,
-                    "Selling harvested crops..."
-                )
-
-                if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                    return
-                end
-
-                -- Wait after the full sequence so the newly planted crops can grow
-                -- before the next cycle starts at HARVEST.
-                if planted > 0 then
+                if not ok then
+                    passOK, failedStage, failureReason = false, "Harvest", harvested
+                elseif #harvestErrors > 0 then
+                    passOK, failedStage, failureReason =
+                        false, "Harvest", table.concat(harvestErrors, " | ")
+                else
                     SetStatus(
-                        "Cycle complete; waiting " .. CONFIG.GrowWait .. "s before next harvest",
+                        "Harvested " .. harvested .. "; skipped " .. skipped,
                         COLORS.Green
                     )
-                    WaitForGrowTime(currentRun)
                 end
-            end)
+            end
 
-            if not AutoCycleRunning or currentRun ~= AutoCycleID or not GUI.Parent then
+            -- STEP 2: PLANT. Only run if Harvest succeeded.
+            if passOK and stillRunning() then
+                local ok, result = pcall(function()
+                    return PlantAllSlots(true, currentRun)
+                end)
+
+                if not stillRunning() then
+                    break
+                end
+
+                if not ok then
+                    passOK, failedStage, failureReason = false, "Plant", result
+                end
+            end
+
+            -- STEP 3: BUY. Only run if Plant succeeded.
+            if passOK and stillRunning() then
+                local ok, result = pcall(function()
+                    local selectedCrop = GetSelectedSeed()
+                    if not selectedCrop then
+                        error("Selected seed is unavailable", 0)
+                    end
+
+                    local bought = 0
+                    for i = 1, 10 do
+                        if not stillRunning() then
+                            return bought
+                        end
+
+                        MustInvoke(
+                            "Buy",
+                            selectedCrop,
+                            "Buying " .. selectedCrop .. " (" .. i .. "/10)"
+                        )
+                        bought += 1
+                    end
+                    return bought
+                end)
+
+                if not stillRunning() then
+                    break
+                end
+
+                if not ok then
+                    passOK, failedStage, failureReason = false, "Buy", result
+                end
+            end
+
+            -- STEP 4: SELL. Only run if Buy succeeded.
+            if passOK and stillRunning() then
+                local ok, result = pcall(function()
+                    return MustInvoke("Sell", nil, "Selling harvested crops...")
+                end)
+
+                if not stillRunning() then
+                    break
+                end
+
+                if not ok then
+                    passOK, failedStage, failureReason = false, "Sell", result
+                end
+            end
+
+            if not stillRunning() then
                 break
             end
 
-            if cycleOK then
-                SetStatus("Cycle complete; restarting at Harvest...", COLORS.Green)
+            if passOK then
+                SetStatus("All steps completed; restarting from Harvest...", COLORS.Green)
                 task.wait(1)
             else
-                local errorText = tostring(cycleError)
-                local lowerError = errorText:lower()
-                warn("[Lunti Auto] Cycle issue; restarting from HARVEST:", errorText)
-
-                local retryDelay = 5
-                if lowerError:find("out of stock", 1, true)
-                    or lowerError:find("restock", 1, true) then
-                    retryDelay = 10
-                end
-
-                SetStatus(
-                    "Cycle issue: " .. errorText .. " | retrying from Harvest in " .. retryDelay .. "s",
-                    COLORS.Red
-                )
-
-                for _ = 1, retryDelay * 4 do
-                    if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                        break
-                    end
-                    task.wait(0.25)
+                -- Do not continue to the next stage after a failure.
+                -- Restart the entire sequence at STEP 1: HARVEST.
+                if not retryFromHarvest(failedStage, failureReason) then
+                    break
                 end
             end
         end
@@ -1280,6 +1327,7 @@ end)
 --// INITIALIZATION
 
 RefreshSeedOptions()
+RefreshSeedDropdown()
 RefreshSeedLabel()
 
 if #SeedOptions > 0 then
