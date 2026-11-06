@@ -146,7 +146,8 @@ local function GetSelectedSeed()
         return nil
     end
 
-    -- CropsValue is the selected child Instance inside:
+    -- The server expects the seed NAME (string), not the Instance.
+    -- The selected name comes from:
     -- ReplicatedStorage.Garden.Assets.SeedPackets
     local CropsValue = SeedOptions[SelectedSeedIndex]
 
@@ -154,7 +155,7 @@ local function GetSelectedSeed()
         return nil
     end
 
-    return CropsValue
+    return CropsValue.Name
 end
 
 --// GUI HELPERS
@@ -470,7 +471,7 @@ local function RefreshSeedLabel()
     local crop = GetSelectedSeed()
 
     if crop then
-        SeedName.Text = crop.Name
+        SeedName.Text = crop
     else
         SeedName.Text = "No seed packets found"
     end
@@ -654,18 +655,16 @@ local function InvokeAction(action, argument)
     end
 
     -- Exact game API:
-    -- Buy:     InvokeServer("Buy", CropsValue)
-    -- Plant:   InvokeServer("Plant", {Crop = CropsValue, Slot = slot})
+    -- Exact server API; Crop values are seed-name strings:
+    -- Buy:     InvokeServer("Buy", "Carrot")
+    -- Plant:   InvokeServer("Plant", {Crop = "Carrot", Slot = slot})
     -- Harvest: InvokeServer("Harvest", slot)
     -- Sell:    InvokeServer("Sell", nil)
-    --
-    -- argument is intentionally passed as the second parameter, including nil for Sell.
-    if action == "Buy" and typeof(argument) == "Instance" then
-        print("[Lunti Auto] Buy seed:", argument.Name, argument.ClassName, argument:GetFullName())
+    if action == "Buy" then
+        print("[Lunti Auto] Buy seed name:", tostring(argument))
     elseif action == "Plant" and type(argument) == "table" then
-        local crop = argument.Crop
-        print("[Lunti Auto] Plant seed:",
-            typeof(crop) == "Instance" and crop.Name or tostring(crop),
+        print("[Lunti Auto] Plant seed name:",
+            tostring(argument.Crop),
             "Slot:", tostring(argument.Slot))
     else
         print("[Lunti Auto] InvokeServer:", action, "Argument:", tostring(argument))
@@ -849,10 +848,10 @@ BuyButton.Activated:Connect(function()
         local response = MustInvoke(
             "Buy",
             crop,
-            "Buying " .. crop.Name .. "..."
+            "Buying " .. crop .. "..."
         )
 
-        return response or crop.Name .. " purchased"
+        return response or crop .. " purchased"
     end)
 end)
 
@@ -993,7 +992,7 @@ AutoButton.Activated:Connect(function()
                     MustInvoke(
                         "Buy",
                         selectedCrop,
-                        "Buying " .. selectedCrop.Name .. " (" .. i .. "/10)"
+                        "Buying " .. selectedCrop .. " (" .. i .. "/10)"
                     )
 
                     if not AutoCycleRunning
@@ -1157,4 +1156,4 @@ else
     end)
 end
 
-print("[Lunti Auto v2] GUI successfully initialized.")
+print("[Lunti Auto v3] GUI successfully initialized.")
