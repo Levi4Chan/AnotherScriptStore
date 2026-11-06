@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Edition yes
+    Modern GUI Edition
 
     Features:
     - Automatic GUI creation
@@ -755,15 +755,41 @@ local function InvokeAction(action, argument)
 end
 
 local function MustInvoke(action, argument, message)
-    SetStatus(message, COLORS.Green)
+    -- Retry this specific action when the server applies its request cooldown.
+    -- Do not restart the entire cycle at SELL just because one request was rate-limited.
+    local retryDelays = {1, 2, 3, 5, 5}
+    local attempt = 0
 
-    local success, response = InvokeAction(action, argument)
+    while true do
+        SetStatus(message .. " [" .. action .. "]", COLORS.Green)
 
-    if not success then
-        error(response, 0)
+        local success, response = InvokeAction(action, argument)
+
+        if success then
+            return response
+        end
+
+        local errorText = tostring(response or "Unknown server response")
+        local lower = errorText:lower()
+
+        if lower:find("slow down", 1, true)
+            or lower:find("cooldown", 1, true)
+            or lower:find("too fast", 1, true) then
+
+            attempt += 1
+            if attempt > #retryDelays then
+                error(action .. " still rate-limited after retries: " .. errorText, 0)
+            end
+
+            local delaySeconds = retryDelays[attempt]
+            warn("[Lunti Auto] " .. action .. " rate-limited; retrying in "
+                .. delaySeconds .. "s (attempt " .. attempt .. "/" .. #retryDelays .. ")")
+            SetStatus(action .. " rate-limited; retrying in " .. delaySeconds .. "s", COLORS.Red)
+            task.wait(delaySeconds)
+        else
+            error(action .. " failed: " .. errorText, 0)
+        end
     end
-
-    return response
 end
 
 -- Try every plot slot. A slot that is empty/not ready must not stop
@@ -793,25 +819,49 @@ local function HarvestAllSlots(isAuto, runID)
             skipped += 1
             print("[Lunti Auto] Slot " .. slot .. " is not ready: " .. message)
         elseif lower:find("slow down", 1, true)
-            or lower:find("cooldown", 1, true) then
-            -- Respect the game's rate limit, then retry this slot once.
-            task.wait(0.5)
-            ok, response = InvokeAction("Harvest", slot)
-            message = tostring(response or "")
-            lower = message:lower()
+            or lower:find("cooldown", 1, true)
+            or lower:find("too fast", 1, true) then
+            -- Retry this harvest slot with a growing wait instead of treating
+            -- the cooldown as an empty slot or aborting the entire scan.
+            local delays = {1, 2, 3, 5}
+            local recovered = false
 
-            if ok then
-                harvested += 1
-            elseif lower:find("nothing is ready", 1, true)
-                or lower:find("nothing ready", 1, true)
-                or lower:find("not ready", 1, true)
-                or lower:find("empty", 1, true) then
-                skipped += 1
-            else
-                table.insert(failures, "Slot " .. slot .. ": " .. message)
+            for attempt, delaySeconds in ipairs(delays) do
+                if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then
+                    break
+                end
+
+                SetStatus("Harvest slot " .. slot .. " rate-limited; retrying in "
+                    .. delaySeconds .. "s", COLORS.Red)
+                task.wait(delaySeconds)
+
+                ok, response = InvokeAction("Harvest", slot)
+                message = tostring(response or "")
+                lower = message:lower()
+
+                if ok then
+                    harvested += 1
+                    recovered = true
+                    break
+                elseif lower:find("nothing is ready", 1, true)
+                    or lower:find("nothing ready", 1, true)
+                    or lower:find("not ready", 1, true)
+                    or lower:find("empty", 1, true) then
+                    skipped += 1
+                    recovered = true
+                    break
+                elseif not (lower:find("slow down", 1, true)
+                    or lower:find("cooldown", 1, true)
+                    or lower:find("too fast", 1, true)) then
+                    break
+                end
+            end
+
+            if not recovered then
+                table.insert(failures, "Harvest slot " .. slot .. ": " .. message)
             end
         else
-            table.insert(failures, "Slot " .. slot .. ": " .. message)
+            table.insert(failures, "Harvest slot " .. slot .. ": " .. message)
         end
 
         if slot < 10 then
