@@ -1225,7 +1225,7 @@ local Tabs = {
 local Crops = game:GetService("ReplicatedStorage").Garden.Assets.SeedPackets
 local CropsTable = {}
 local CropsValue
-local ToggleValue
+local ToggleValue = false
 local Event = game:GetService("ReplicatedStorage").Garden.Remotes.Action
 
 for _, v in ipairs(Crops:GetChildren()) do
@@ -1248,7 +1248,7 @@ Tabs.MainTab:Toggle({
 	end,
 })
 
-while task.wait() do
+while task.wait() and ToggleValue do
 
 for i=1, 5 do
 		Event:InvokeServer(
