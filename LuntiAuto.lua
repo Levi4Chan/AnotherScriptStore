@@ -10,7 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local playerGui = game:GetService"CoreGui"
+local playerGui = game:GetService("CoreGui")
 local existingGui = playerGui:FindFirstChild("LuntiAutoGui")
 if existingGui then existingGui:Destroy() end
 local garden = ReplicatedStorage:WaitForChild("Garden")
