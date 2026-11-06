@@ -146,7 +146,15 @@ local function GetSelectedSeed()
         return nil
     end
 
-    return SeedOptions[SelectedSeedIndex]
+    -- CropsValue is the selected child Instance inside:
+    -- ReplicatedStorage.Garden.Assets.SeedPackets
+    local CropsValue = SeedOptions[SelectedSeedIndex]
+
+    if not CropsValue or not CropsValue.Parent then
+        return nil
+    end
+
+    return CropsValue
 end
 
 --// GUI HELPERS
@@ -645,8 +653,24 @@ local function InvokeAction(action, argument)
         return false, "Garden.Remotes.Action RemoteFunction unavailable"
     end
 
-    -- This game API is assumed to accept (actionName, argument).
-    -- Keep the original argument shapes until the server handler confirms otherwise.
+    -- Exact game API:
+    -- Buy:     InvokeServer("Buy", CropsValue)
+    -- Plant:   InvokeServer("Plant", {Crop = CropsValue, Slot = slot})
+    -- Harvest: InvokeServer("Harvest", slot)
+    -- Sell:    InvokeServer("Sell", nil)
+    --
+    -- argument is intentionally passed as the second parameter, including nil for Sell.
+    if action == "Buy" and typeof(argument) == "Instance" then
+        print("[Lunti Auto] Buy seed:", argument.Name, argument.ClassName, argument:GetFullName())
+    elseif action == "Plant" and type(argument) == "table" then
+        local crop = argument.Crop
+        print("[Lunti Auto] Plant seed:",
+            typeof(crop) == "Instance" and crop.Name or tostring(crop),
+            "Slot:", tostring(argument.Slot))
+    else
+        print("[Lunti Auto] InvokeServer:", action, "Argument:", tostring(argument))
+    end
+
     local ok, result, detail = pcall(function()
         return Remote:InvokeServer(action, argument)
     end)
@@ -1133,4 +1157,4 @@ else
     end)
 end
 
-print("[Lunti Auto] GUI successfully initialized.")
+print("[Lunti Auto v2] GUI successfully initialized.")
