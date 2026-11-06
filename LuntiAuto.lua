@@ -878,7 +878,7 @@ PlantButton.Activated:Connect(function()
             )
 
             if i < 10 then
-                task.wait(CONFIG.PlantDelay)
+                task.wait(0.4)
             end
         end
 
@@ -898,7 +898,7 @@ HarvestButton.Activated:Connect(function()
             )
 
             if i < 10 then
-                task.wait(CONFIG.HarvestDelay)
+                task.wait(0.3)
             end
         end
 
@@ -1021,7 +1021,7 @@ AutoButton.Activated:Connect(function()
                     )
 
                     if i < 10 then
-                        task.wait(CONFIG.PlantDelay)
+                        task.wait(0.4)
                     end
                 end
 
@@ -1059,7 +1059,7 @@ AutoButton.Activated:Connect(function()
                     )
 
                     if i < 10 then
-                        task.wait(CONFIG.HarvestDelay)
+                        task.wait(0.3)
                     end
                 end
 
