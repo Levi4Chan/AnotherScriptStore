@@ -1230,7 +1230,7 @@ end
 
 Tabs.MainTab:Dropdown({
 	Title = "Main Category",
-	Values = ,
+	Values = CropsTable,
 	Value = "All",
 	Callback = function(option)
 		if dropdownA then
