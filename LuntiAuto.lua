@@ -71,6 +71,8 @@ local CONFIG = {
     MaximumWait = 600,
     WaitStep = 10,
     TweenSpeed = 0.18,
+    PlantDelay = 0.4,
+    HarvestDelay = 0.2,
 }
 
 local COLORS = {
@@ -874,6 +876,10 @@ PlantButton.Activated:Connect(function()
                 },
                 "Planting slot " .. i .. "/10..."
             )
+
+            if i < 10 then
+                task.wait(CONFIG.PlantDelay)
+            end
         end
 
         return "Slots 1–10 planted"
@@ -890,6 +896,10 @@ HarvestButton.Activated:Connect(function()
                 i,
                 "Harvesting slot " .. i .. "/10..."
             )
+
+            if i < 10 then
+                task.wait(CONFIG.HarvestDelay)
+            end
         end
 
         return "Slots 1–10 harvested"
@@ -972,6 +982,7 @@ AutoButton.Activated:Connect(function()
 
         local success, result = pcall(function()
 
+            -- Toggle remains active and repeats complete cycles until stopped.
             while AutoCycleRunning
                 and currentRun == AutoCycleID do
 
@@ -1008,6 +1019,10 @@ AutoButton.Activated:Connect(function()
                         },
                         "Planting slot " .. i .. "/10..."
                     )
+
+                    if i < 10 then
+                        task.wait(CONFIG.PlantDelay)
+                    end
                 end
 
                 if not AutoCycleRunning
@@ -1042,6 +1057,10 @@ AutoButton.Activated:Connect(function()
                         i,
                         "Harvesting slot " .. i .. "/10..."
                     )
+
+                    if i < 10 then
+                        task.wait(CONFIG.HarvestDelay)
+                    end
                 end
 
                 if not AutoCycleRunning
@@ -1156,4 +1175,4 @@ else
     end)
 end
 
-print("[Lunti Auto v3] GUI successfully initialized.")
+print("[Lunti Auto] GUI successfully initialized.")
