@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Edition
+    Modern GUI Edition Yes
 
     Features:
     - Automatic GUI creation
@@ -750,6 +750,66 @@ local function MustInvoke(action, argument, message)
     return response
 end
 
+-- Try every plot slot. A slot that is empty/not ready must not stop
+-- the scan, otherwise ready crops in later slots are never checked.
+local function HarvestAllSlots(isAuto, runID)
+    local harvested = 0
+    local skipped = 0
+    local failures = {}
+
+    for slot = 1, 10 do
+        if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then
+            break
+        end
+
+        SetStatus("Checking harvest slot " .. slot .. "/10...", COLORS.Green)
+
+        local ok, response = InvokeAction("Harvest", slot)
+        local message = tostring(response or "")
+        local lower = message:lower()
+
+        if ok then
+            harvested += 1
+        elseif lower:find("nothing is ready", 1, true)
+            or lower:find("nothing ready", 1, true)
+            or lower:find("not ready", 1, true)
+            or lower:find("empty", 1, true) then
+            skipped += 1
+            print("[Lunti Auto] Slot " .. slot .. " is not ready: " .. message)
+        elseif lower:find("slow down", 1, true)
+            or lower:find("cooldown", 1, true) then
+            -- Respect the game's rate limit, then retry this slot once.
+            task.wait(0.5)
+            ok, response = InvokeAction("Harvest", slot)
+            message = tostring(response or "")
+            lower = message:lower()
+
+            if ok then
+                harvested += 1
+            elseif lower:find("nothing is ready", 1, true)
+                or lower:find("nothing ready", 1, true)
+                or lower:find("not ready", 1, true)
+                or lower:find("empty", 1, true) then
+                skipped += 1
+            else
+                table.insert(failures, "Slot " .. slot .. ": " .. message)
+            end
+        else
+            table.insert(failures, "Slot " .. slot .. ": " .. message)
+        end
+
+        if slot < 10 then
+            task.wait(CONFIG.HarvestDelay)
+        end
+    end
+
+    if #failures > 0 then
+        warn("[Lunti Auto] Harvest issues: " .. table.concat(failures, " | "))
+    end
+
+    return harvested, skipped, failures
+end
+
 --// JOB HANDLER
 
 local function RunJob(message, callback)
@@ -876,7 +936,10 @@ PlantButton.Activated:Connect(function()
                 },
                 "Planting slot " .. i .. "/10..."
             )
-                task.wait(0.4)
+
+            if i < 10 then
+                task.wait(CONFIG.PlantDelay)
+            end
         end
 
         return "Slots 1–10 planted"
@@ -886,17 +949,15 @@ end)
 --// HARVEST ALL
 
 HarvestButton.Activated:Connect(function()
-    RunJob("Harvesting crops...", function()
-        for i = 1, 10 do
-            MustInvoke(
-                "Harvest",
-                i,
-                "Harvesting slot " .. i .. "/10..."
-            )
-                task.wait(0.3)
+    RunJob("Checking harvest slots...", function()
+        local harvested, skipped, failures = HarvestAllSlots(false)
+
+        if #failures > 0 then
+            return "Harvested " .. harvested .. "; skipped " .. skipped
+                .. "; errors: " .. #failures
         end
 
-        return "Slots 1–10 harvested"
+        return "Harvested " .. harvested .. " slot(s); not ready/empty: " .. skipped
     end)
 end)
 
@@ -973,25 +1034,20 @@ AutoButton.Activated:Connect(function()
     AutoButton.BackgroundColor3 = COLORS.Red
 
     task.spawn(function()
-
-        local success, result = pcall(function()
-
-            -- Toggle remains active and repeats complete cycles until stopped.
-            while AutoCycleRunning
-                and currentRun == AutoCycleID do
-
+        -- Keep the toggle active until the user presses STOP AUTO CYCLE
+        -- (or closes the GUI). Individual cycle errors are reported and retried.
+        while AutoCycleRunning and currentRun == AutoCycleID and GUI.Parent do
+            local cycleOK, cycleError = pcall(function()
                 local selectedCrop = GetSelectedSeed()
 
                 if not selectedCrop then
-                    error("Selected seed is unavailable", 0)
+                    error("Selected seed is unavailable; waiting for seed packets", 0)
                 end
 
                 -- BUY AND PLANT SLOTS
-
                 for i = 1, 10 do
-                    if not AutoCycleRunning
-                        or currentRun ~= AutoCycleID then
-                        break
+                    if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                        return
                     end
 
                     MustInvoke(
@@ -1000,9 +1056,8 @@ AutoButton.Activated:Connect(function()
                         "Buying " .. selectedCrop .. " (" .. i .. "/10)"
                     )
 
-                    if not AutoCycleRunning
-                        or currentRun ~= AutoCycleID then
-                        break
+                    if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                        return
                     end
 
                     MustInvoke(
@@ -1013,16 +1068,17 @@ AutoButton.Activated:Connect(function()
                         },
                         "Planting slot " .. i .. "/10..."
                     )
-                        task.wait(0.4)
+
+                    if i < 10 then
+                        task.wait(CONFIG.PlantDelay)
+                    end
                 end
 
-                if not AutoCycleRunning
-                    or currentRun ~= AutoCycleID then
-                    break
+                if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                    return
                 end
 
                 -- WAIT FOR CROPS
-
                 SetStatus(
                     "Growing crops: " .. CONFIG.GrowWait .. "s",
                     COLORS.Green
@@ -1030,61 +1086,63 @@ AutoButton.Activated:Connect(function()
 
                 WaitForGrowTime(currentRun)
 
-                if not AutoCycleRunning
-                    or currentRun ~= AutoCycleID then
-                    break
+                if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                    return
                 end
 
-                -- HARVEST
+                -- HARVEST ALL SLOTS
+                local harvested, skipped, harvestErrors =
+                    HarvestAllSlots(true, currentRun)
 
-                for i = 1, 10 do
-                    if not AutoCycleRunning
-                        or currentRun ~= AutoCycleID then
-                        break
-                    end
-
-                    MustInvoke(
-                        "Harvest",
-                        i,
-                        "Harvesting slot " .. i .. "/10..."
-                    )
-                        task.wait(0.3)
+                if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                    return
                 end
 
-                if not AutoCycleRunning
-                    or currentRun ~= AutoCycleID then
-                    break
-                end
+                SetStatus(
+                    "Harvested " .. harvested .. "; skipped " .. skipped,
+                    #harvestErrors > 0 and COLORS.Red or COLORS.Green
+                )
 
                 -- SELL
-
                 MustInvoke(
                     "Sell",
                     nil,
                     "Selling harvested crops..."
                 )
+            end)
+
+            if not AutoCycleRunning or currentRun ~= AutoCycleID or not GUI.Parent then
+                break
             end
 
-            return "Auto cycle stopped"
+            if cycleOK then
+                SetStatus("Cycle complete; starting next cycle...", COLORS.Green)
+                task.wait(1)
+            else
+                warn("[Lunti Auto] Cycle error; auto cycle remains enabled:", cycleError)
+                SetStatus(
+                    "Cycle issue: " .. tostring(cycleError) .. " | retrying in 5s",
+                    COLORS.Red
+                )
 
-        end)
-
-        JobInProgress = false
-
-        if success then
-            SetStatus(
-                result or "Auto cycle finished",
-                COLORS.Green
-            )
-        else
-            SetStatus(tostring(result), COLORS.Red)
+                -- Avoid hammering the server if it rejects an action or is unavailable.
+                for _ = 1, 20 do
+                    if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                        break
+                    end
+                    task.wait(0.25)
+                end
+            end
         end
 
+        JobInProgress = false
         AutoCycleRunning = false
 
-        AutoButton.Text = "START AUTO CYCLE"
-        AutoButton.BackgroundColor3 = COLORS.GreenDark
-
+        if GUI.Parent then
+            AutoButton.Text = "START AUTO CYCLE"
+            AutoButton.BackgroundColor3 = COLORS.GreenDark
+            SetStatus("Auto cycle stopped", COLORS.Muted)
+        end
     end)
 end)
 
