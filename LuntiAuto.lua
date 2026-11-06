@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Editionyes
+    Modern GUI Edition
 
     Features:
     - Automatic GUI creation
@@ -277,7 +277,7 @@ local Window = Create("Frame", {
     Name = "MainWindow",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(390, 590),
+    Size = UDim2.fromOffset(390, 650),
     BackgroundColor3 = COLORS.Background,
     BorderSizePixel = 0,
 }, GUI)
@@ -419,6 +419,20 @@ local function SetStatus(message, color)
     StatusText.Text = tostring(message)
     StatusDot.BackgroundColor3 = color or COLORS.Green
 end
+
+TeleportButton.Activated:Connect(function()
+    local character = Player.Character or Player.CharacterAdded:Wait()
+    local root = character:FindFirstChild("HumanoidRootPart")
+        or character:WaitForChild("HumanoidRootPart", 5)
+
+    if not root then
+        SetStatus("Teleport failed: character root not found", COLORS.Red)
+        return
+    end
+
+    root.CFrame = CFrame.new(272, 5, -104)
+    SetStatus("Teleported to 272, 5, -104", COLORS.Green)
+end)
 
 --// PRIORITY SEED MULTI-SELECT
 MakeLabel(Content, "SEED PACKET PRIORITY (TOP TO BOTTOM)", UDim2.new(1,0,0,17), UDim2.fromOffset(2,66), 10, COLORS.Muted).Font = Enum.Font.GothamBold
@@ -625,6 +639,18 @@ MakeLabel(
     9,
     COLORS.Muted
 ).TextXAlignment = Enum.TextXAlignment.Center
+
+--// TELEPORT BUTTON
+
+local TeleportButton = MakeButton(
+    Content,
+    "TELEPORT TO 272, 5, -104",
+    UDim2.new(1, 0, 0, 44),
+    UDim2.fromOffset(0, 530),
+    COLORS.PanelLight
+)
+TeleportButton.TextSize = 12
+TeleportButton.TextColor3 = COLORS.Green
 
 --// MINIMIZE / RESTORE
 
@@ -959,6 +985,14 @@ end)
 
 --// BUY SELECTED SEED
 
+local function IsRateLimitResponse(message)
+    local lower = tostring(message or ""):lower()
+    return lower:find("slow down",1,true)
+        or lower:find("cooldown",1,true)
+        or lower:find("too fast",1,true)
+        or lower:find("rate limit",1,true)
+end
+
 local function IsSeedFallbackResponse(message)
     local lower = tostring(message or ""):lower()
     return lower:find("unknown seed",1,true)
@@ -967,6 +1001,18 @@ local function IsSeedFallbackResponse(message)
         or lower:find("restock",1,true)
         or lower:find("unavailable",1,true)
         or lower:find("not available",1,true)
+        or lower:find("not enough",1,true)
+        or lower:find("insufficient",1,true)
+        or lower:find("no seed",1,true)
+        or lower:find("seed packet",1,true)
+        or lower:find("not owned",1,true)
+        or lower:find("cannot plant",1,true)
+        or lower:find("can't plant",1,true)
+        or lower:find("cannot use",1,true)
+        or lower:find("not plantable",1,true)
+        or lower:find("locked",1,true)
+        or lower:find("rejected",1,true)
+        or lower:find("failed",1,true)
 end
 
 local function BuyWithSeedFallback(seedNames)
@@ -1000,6 +1046,7 @@ end)
 local function PlantAllSlots(isAuto, runID)
     local seedNames = GetPrioritySeedNames()
     if #seedNames == 0 then error("Select one or more seed packets first",0) end
+    print("[Lunti Auto] Plant priority order: " .. table.concat(seedNames, " -> "))
     local planted = 0
     local slotFailures = {}
 
@@ -1019,12 +1066,35 @@ local function PlantAllSlots(isAuto, runID)
             end
 
             local reason = tostring(response or "Plant rejected")
-            if IsSeedFallbackResponse(reason) then
+            if IsRateLimitResponse(reason) then
+                -- A cooldown is not a seed mismatch. Retry this exact seed first.
+                local retryDelays = {1, 2, 3, 5}
+                local recovered = false
+                for _, delaySeconds in ipairs(retryDelays) do
+                    if isAuto and (not AutoCycleRunning or runID ~= AutoCycleID) then break end
+                    SetStatus("Plant rate-limited; retrying " .. seedName .. " in " .. delaySeconds .. "s", COLORS.Red)
+                    task.wait(delaySeconds)
+                    ok,response = InvokeAction("Plant",{Crop=seedName,Slot=slot})
+                    if ok then
+                        planted += 1
+                        plantedThisSlot = true
+                        recovered = true
+                        break
+                    end
+                    reason = tostring(response or "Plant rejected")
+                    if not IsRateLimitResponse(reason) then break end
+                end
+                if plantedThisSlot then break end
+                if not recovered and IsRateLimitResponse(reason) then
+                    error("Plant remained rate-limited for slot " .. slot .. ": " .. reason,0)
+                end
                 table.insert(errors,seedName .. ": " .. reason)
-                SetStatus(seedName .. " unavailable for slot " .. slot .. "; trying next...",COLORS.Muted)
+                SetStatus(seedName .. " rejected for slot " .. slot .. "; trying next priority...",COLORS.Muted)
                 task.wait(CONFIG.PlantDelay)
             else
-                error("Plant slot " .. slot .. " failed for " .. seedName .. ": " .. reason,0)
+                table.insert(errors,seedName .. ": " .. reason)
+                SetStatus(seedName .. " rejected for slot " .. slot .. "; trying next priority...",COLORS.Muted)
+                task.wait(CONFIG.PlantDelay)
             end
         end
 
