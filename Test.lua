@@ -1225,6 +1225,7 @@ local Crops = game:GetService("ReplicatedStorage").Garden.Assets.SeedPackets
 local CropsTable = {}
 local CropsValue
 local ToggleValue
+local Event = game:GetService("ReplicatedStorage").Garden.Remotes.Action
 
 for _, v in next, Crops:GetDescendants() do
 	table.insert(CropsTable, v)
@@ -1233,7 +1234,7 @@ end
 Tabs.MainTab:Dropdown({
 	Title = "Crops",
 	Values = CropsTable,
-	Value = "Carrot",
+	Value = "All",
 	Callback = function(option)
 		CropsValue = option
 	end,
