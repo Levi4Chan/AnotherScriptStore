@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Edition
+    Modern GUI Editionyes
 
     Features:
     - Automatic GUI creation
@@ -420,19 +420,6 @@ local function SetStatus(message, color)
     StatusDot.BackgroundColor3 = color or COLORS.Green
 end
 
-TeleportButton.Activated:Connect(function()
-    local character = Player.Character or Player.CharacterAdded:Wait()
-    local root = character:FindFirstChild("HumanoidRootPart")
-        or character:WaitForChild("HumanoidRootPart", 5)
-
-    if not root then
-        SetStatus("Teleport failed: character root not found", COLORS.Red)
-        return
-    end
-
-    root.CFrame = CFrame.new(272, 5, -104)
-    SetStatus("Teleported to 272, 5, -104", COLORS.Green)
-end)
 
 --// PRIORITY SEED MULTI-SELECT
 MakeLabel(Content, "SEED PACKET PRIORITY (TOP TO BOTTOM)", UDim2.new(1,0,0,17), UDim2.fromOffset(2,66), 10, COLORS.Muted).Font = Enum.Font.GothamBold
@@ -651,6 +638,20 @@ local TeleportButton = MakeButton(
 )
 TeleportButton.TextSize = 12
 TeleportButton.TextColor3 = COLORS.Green
+
+TeleportButton.Activated:Connect(function()
+    local character = Player.Character or Player.CharacterAdded:Wait()
+    local root = character:FindFirstChild("HumanoidRootPart")
+        or character:WaitForChild("HumanoidRootPart", 5)
+
+    if not root then
+        SetStatus("Teleport failed: character root not found", COLORS.Red)
+        return
+    end
+
+    root.CFrame = CFrame.new(272, 5, -104)
+    SetStatus("Teleported to 272, 5, -104", COLORS.Green)
+end)
 
 --// MINIMIZE / RESTORE
 
