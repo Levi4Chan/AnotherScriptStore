@@ -11,6 +11,8 @@ local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local existingGui = playerGui:FindFirstChild("LuntiAutoGui")
+if existingGui then existingGui:Destroy() end
 local garden = ReplicatedStorage:WaitForChild("Garden")
 local seedPackets = garden:WaitForChild("Assets"):WaitForChild("SeedPackets")
 
@@ -48,6 +50,7 @@ refreshSeedOptions()
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "LuntiAutoGui"
+gui.DisplayOrder = 100
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -471,4 +474,5 @@ closeButton.Activated:Connect(function()
 	autoCycleRunId += 1
 	gui:Destroy()
 end)
+
 
