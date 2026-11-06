@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Editionyes
+    Modern GUI Edition
 
     Features:
     - Automatic GUI creation
@@ -102,6 +102,8 @@ local AutoCycleRunning = false
 local AutoCycleID = 0
 local AutoBuyRunning = false
 local AutoBuyID = 0
+local AutoSellRunning = false
+local AutoSellID = 0
 
 local GardenReference
 local SeedPacketsReference
@@ -279,7 +281,7 @@ local Window = Create("Frame", {
     Name = "MainWindow",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(390, 710),
+    Size = UDim2.fromOffset(390, 790),
     BackgroundColor3 = COLORS.Background,
     BorderSizePixel = 0,
 }, GUI)
@@ -622,7 +624,7 @@ AutoButton.TextSize = 13
 
 MakeLabel(
     Content,
-    "Buy → Plant → Wait → Harvest → Sell",
+    "Harvest → Plant → Grow Wait",
     UDim2.new(1, 0, 0, 20),
     UDim2.fromOffset(0, 502),
     9,
@@ -663,6 +665,32 @@ local AutoBuyButton = MakeButton(
     COLORS.GreenDark
 )
 AutoBuyButton.TextSize = 12
+
+local AutoBuyStatusText = MakeLabel(
+    Content, "Auto Buy: stopped", UDim2.new(1, 0, 0, 18),
+    UDim2.fromOffset(2, 628), 10, COLORS.Muted
+)
+
+local AutoSellButton = MakeButton(
+    Content, "START AUTO SELL",
+    UDim2.new(1, 0, 0, 44), UDim2.fromOffset(0, 652), COLORS.GreenDark
+)
+AutoSellButton.TextSize = 12
+
+local AutoSellStatusText = MakeLabel(
+    Content, "Auto Sell: stopped", UDim2.new(1, 0, 0, 18),
+    UDim2.fromOffset(2, 700), 10, COLORS.Muted
+)
+
+local function SetBuyStatus(message, color)
+    AutoBuyStatusText.Text = "Auto Buy: " .. tostring(message)
+    AutoBuyStatusText.TextColor3 = color or COLORS.Muted
+end
+
+local function SetSellStatus(message, color)
+    AutoSellStatusText.Text = "Auto Sell: " .. tostring(message)
+    AutoSellStatusText.TextColor3 = color or COLORS.Muted
+end
 
 --// MINIMIZE / RESTORE
 
@@ -1052,12 +1080,12 @@ AutoBuyButton.Activated:Connect(function()
         AutoBuyID += 1
         AutoBuyButton.Text = "START AUTO BUY"
         AutoBuyButton.BackgroundColor3 = COLORS.GreenDark
-        SetStatus("Auto Buy stopping...", COLORS.Muted)
+        SetBuyStatus("stopping...", COLORS.Muted)
         return
     end
 
     if #GetPrioritySeedNames() == 0 then
-        SetStatus("Select seed packets before starting Auto Buy", COLORS.Red)
+        SetBuyStatus("select seed packets first", COLORS.Red)
         return
     end
 
@@ -1071,7 +1099,7 @@ AutoBuyButton.Activated:Connect(function()
         while AutoBuyRunning and runID == AutoBuyID and GUI.Parent do
             local priority = GetPrioritySeedNames()
             if #priority == 0 then
-                SetStatus("No seed packets selected; Auto Buy waiting...", COLORS.Red)
+                SetBuyStatus("no seeds selected; waiting...", COLORS.Red)
                 task.wait(1)
             else
                 local ok, result = pcall(function()
@@ -1080,10 +1108,10 @@ AutoBuyButton.Activated:Connect(function()
                 end)
 
                 if ok then
-                    SetStatus("Bought " .. tostring(result) .. "; next Auto Buy pass...", COLORS.Green)
+                    SetBuyStatus("bought " .. tostring(result) .. "; next pass...", COLORS.Green)
                     task.wait(1)
                 else
-                    SetStatus("Auto Buy failed: " .. tostring(result), COLORS.Red)
+                    SetBuyStatus("failed: " .. tostring(result), COLORS.Red)
                     warn("[Lunti Auto] Auto Buy failed: " .. tostring(result))
                     task.wait(2)
                 end
@@ -1097,6 +1125,79 @@ AutoBuyButton.Activated:Connect(function()
         end
     end)
 end)
+
+-- Independent Auto Sell loop. It does not depend on Garden Cycle or Auto Buy.
+AutoSellButton.Activated:Connect(function()
+    if AutoSellRunning then
+        AutoSellRunning = false
+        AutoSellID += 1
+        AutoSellButton.Text = "START AUTO SELL"
+        AutoSellButton.BackgroundColor3 = COLORS.GreenDark
+        SetSellStatus("stopping...", COLORS.Muted)
+        return
+    end
+
+    if not GetActionRemote() then
+        SetSellStatus("Action Remote unavailable", COLORS.Red)
+        return
+    end
+
+    AutoSellRunning = true
+    AutoSellID += 1
+    local runID = AutoSellID
+    AutoSellButton.Text = "STOP AUTO SELL"
+    AutoSellButton.BackgroundColor3 = COLORS.Red
+    SetSellStatus("running...", COLORS.Green)
+
+    task.spawn(function()
+        while AutoSellRunning and runID == AutoSellID and GUI.Parent do
+            local ok, result = pcall(function()
+                local retryDelays = {1, 2, 3, 5, 5}
+                local attempt = 0
+
+                while AutoSellRunning and runID == AutoSellID do
+                    SetSellStatus("selling...", COLORS.Green)
+                    local success, response = InvokeAction("Sell", nil)
+
+                    if success then
+                        return response or "sell completed; next pass..."
+                    end
+
+                    local reason = tostring(response or "Sell rejected")
+                    if IsRateLimitResponse(reason) then
+                        attempt += 1
+                        if attempt > #retryDelays then
+                            error("Sell remained rate-limited: " .. reason, 0)
+                        end
+                        SetSellStatus("rate-limited; retrying in " .. retryDelays[attempt] .. "s", COLORS.Red)
+                        task.wait(retryDelays[attempt])
+                    else
+                        error(reason, 0)
+                    end
+                end
+
+                return "stopped"
+            end)
+
+            if ok then
+                SetSellStatus(result, COLORS.Green)
+                task.wait(1)
+            else
+                SetSellStatus("failed: " .. tostring(result), COLORS.Red)
+                warn("[Lunti Auto] Auto Sell failed: " .. tostring(result))
+                task.wait(2)
+            end
+        end
+
+        AutoSellRunning = false
+        if GUI.Parent then
+            AutoSellButton.Text = "START AUTO SELL"
+            AutoSellButton.BackgroundColor3 = COLORS.GreenDark
+            SetSellStatus("stopped", COLORS.Muted)
+        end
+    end)
+end)
+
 
 BuyButton.Activated:Connect(function()
     RunJob("Buying selected seed packets...",function()
@@ -1272,8 +1373,9 @@ AutoButton.Activated:Connect(function()
     AutoButton.BackgroundColor3 = COLORS.Red
 
     task.spawn(function()
-        -- Order: HARVEST -> PLANT -> BUY -> SELL.
-        -- Any failed stage aborts the current pass and restarts at HARVEST.
+        -- Order: HARVEST -> PLANT.
+        -- Auto Sell and Auto Buy run independently in their own loops.
+        -- Any failed garden stage aborts the current pass and restarts at HARVEST.
         -- Auto Cycle stops only when the user presses STOP or closes the GUI.
         while AutoCycleRunning and currentRun == AutoCycleID and GUI.Parent do
             local function stillRunning()
@@ -1336,27 +1438,12 @@ AutoButton.Activated:Connect(function()
                 end
             end
 
-            -- STEP 3: SELL. Only run if Plant succeeded.
-            if passOK and stillRunning() then
-                local ok, result = pcall(function()
-                    return MustInvoke("Sell", nil, "Selling harvested crops...")
-                end)
-
-                if not stillRunning() then
-                    break
-                end
-
-                if not ok then
-                    passOK, failedStage, failureReason = false, "Sell", result
-                end
-            end
-
             if not stillRunning() then
                 break
             end
 
             if passOK then
-                SetStatus("All steps completed; restarting from Harvest...", COLORS.Green)
+                SetStatus("Harvest and Plant completed; restarting from Harvest...", COLORS.Green)
                 task.wait(1)
             else
                 -- Do not continue to the next stage after a failure.
@@ -1424,6 +1511,8 @@ CloseButton.Activated:Connect(function()
     AutoCycleID += 1
     AutoBuyRunning = false
     AutoBuyID += 1
+    AutoSellRunning = false
+    AutoSellID += 1
 
     GUI:Destroy()
     if dragConnection then dragConnection:Disconnect() end
@@ -1434,6 +1523,8 @@ end)
 RefreshSeedOptions()
 RefreshSeedDropdown()
 RefreshSeedLabel()
+SetBuyStatus("stopped", COLORS.Muted)
+SetSellStatus("stopped", COLORS.Muted)
 
 if #SeedOptions > 0 then
     SetStatus("Garden interface ready", COLORS.Green)
