@@ -2,7 +2,7 @@
 
 --[[
     LUNTI AUTO | GARDEN CONTROL
-    Modern GUI Editionyes
+    Modern GUI Edition
 
     Features:
     - Automatic GUI creation
@@ -1116,12 +1116,12 @@ AutoButton.Activated:Connect(function()
     AutoButton.BackgroundColor3 = COLORS.Red
 
     task.spawn(function()
-        -- Requested order: HARVEST -> SELL -> PLANT -> BUY -> repeat.
-        -- If SELL fails, the protected cycle exits and the next attempt starts
-        -- again at HARVEST. Auto Cycle remains enabled until STOP is pressed.
+        -- Requested order: HARVEST -> PLANT -> BUY -> SELL.
+        -- The grow timer runs after SELL, so the next loop begins by harvesting
+        -- crops that had time to grow. Auto Cycle stays on until STOP is pressed.
         while AutoCycleRunning and currentRun == AutoCycleID and GUI.Parent do
             local cycleOK, cycleError = pcall(function()
-                -- 1) HARVEST all slots using the same routine as the manual button.
+                -- 1) HARVEST using the same routine as the manual Harvest button.
                 local harvested, skipped, harvestErrors =
                     HarvestAllSlots(true, currentRun)
 
@@ -1134,30 +1134,14 @@ AutoButton.Activated:Connect(function()
                     #harvestErrors > 0 and COLORS.Red or COLORS.Green
                 )
 
-                -- 2) SELL. If this errors/fails, control returns to the outer
-                -- loop, which begins at HARVEST again (not at PLANT or BUY).
-                if harvested > 0 then
-                    MustInvoke(
-                        "Sell",
-                        nil,
-                        "Selling harvested crops..."
-                    )
-                else
-                    SetStatus("Nothing harvested; skipping Sell", COLORS.Muted)
-                end
-
-                if not AutoCycleRunning or currentRun ~= AutoCycleID then
-                    return
-                end
-
-                -- 3) PLANT using the exact same routine as Plant Slots 1–10.
+                -- 2) PLANT using the same routine as the manual Plant button.
                 local planted = PlantAllSlots(true, currentRun)
 
                 if not AutoCycleRunning or currentRun ~= AutoCycleID then
                     return
                 end
 
-                -- 4) BUY at the end, stocking seeds for the next cycle.
+                -- 3) BUY selected seed packets for stock.
                 local selectedCrop = GetSelectedSeed()
                 if not selectedCrop then
                     error("Selected seed is unavailable", 0)
@@ -1174,6 +1158,31 @@ AutoButton.Activated:Connect(function()
                         "Buying " .. selectedCrop .. " (" .. i .. "/10)"
                     )
                 end
+
+                if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                    return
+                end
+
+                -- 4) SELL after planting and buying, as requested.
+                MustInvoke(
+                    "Sell",
+                    nil,
+                    "Selling harvested crops..."
+                )
+
+                if not AutoCycleRunning or currentRun ~= AutoCycleID then
+                    return
+                end
+
+                -- Wait after the full sequence so the newly planted crops can grow
+                -- before the next cycle starts at HARVEST.
+                if planted > 0 then
+                    SetStatus(
+                        "Cycle complete; waiting " .. CONFIG.GrowWait .. "s before next harvest",
+                        COLORS.Green
+                    )
+                    WaitForGrowTime(currentRun)
+                end
             end)
 
             if not AutoCycleRunning or currentRun ~= AutoCycleID or not GUI.Parent then
@@ -1181,7 +1190,7 @@ AutoButton.Activated:Connect(function()
             end
 
             if cycleOK then
-                SetStatus("Cycle complete; starting next harvest...", COLORS.Green)
+                SetStatus("Cycle complete; restarting at Harvest...", COLORS.Green)
                 task.wait(1)
             else
                 local errorText = tostring(cycleError)
@@ -1192,10 +1201,12 @@ AutoButton.Activated:Connect(function()
                 if lowerError:find("out of stock", 1, true)
                     or lowerError:find("restock", 1, true) then
                     retryDelay = 10
-                    SetStatus("Cycle issue: " .. errorText .. " | retrying from Harvest in 10s", COLORS.Red)
-                else
-                    SetStatus("Cycle issue: " .. errorText .. " | retrying from Harvest in 5s", COLORS.Red)
                 end
+
+                SetStatus(
+                    "Cycle issue: " .. errorText .. " | retrying from Harvest in " .. retryDelay .. "s",
+                    COLORS.Red
+                )
 
                 for _ = 1, retryDelay * 4 do
                     if not AutoCycleRunning or currentRun ~= AutoCycleID then
